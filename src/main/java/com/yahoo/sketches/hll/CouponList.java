@@ -75,16 +75,14 @@ class CouponList extends AbstractCoupons {
   }
 
   static final CouponList heapifyList(final Memory mem) {
-    final Object memArr = ((WritableMemory) mem).getArray();
-    final long memAdd = mem.getCumulativeOffset(0);
-    final int lgConfigK = extractLgK(memArr, memAdd);
-    final TgtHllType tgtHllType = extractTgtHllType(memArr, memAdd);
+    final int lgConfigK = extractLgK(mem);
+    final TgtHllType tgtHllType = extractTgtHllType(mem);
 
     final CouponList list = new CouponList(lgConfigK, tgtHllType, CurMode.LIST);
-    final int couponCount = extractListCount(memArr, memAdd);
+    final int couponCount = extractListCount(mem);
     mem.getIntArray(LIST_INT_ARR_START, list.couponIntArr, 0, couponCount);
     list.couponCount = couponCount;
-    list.putOutOfOrderFlag(extractOooFlag(memArr, memAdd));
+    list.putOutOfOrderFlag(extractOooFlag(mem));
     return list;
   }
 
@@ -139,7 +137,7 @@ class CouponList extends AbstractCoupons {
   }
 
   @Override
-  PairIterator getIterator() {
+  PairIterator iterator() {
     return new IntArrayPairIterator(couponIntArr, lgConfigK);
   }
 
@@ -219,7 +217,7 @@ class CouponList extends AbstractCoupons {
   //called by CouponList.couponUpdate()
   static final HllSketchImpl promoteHeapListOrSetToHll(final CouponList src) {
     final HllArray tgtHllArr = HllArray.newHeapHll(src.lgConfigK, src.tgtHllType);
-    final PairIterator srcItr = src.getIterator();
+    final PairIterator srcItr = src.iterator();
     tgtHllArr.putKxQ0(1 << src.lgConfigK);
     while (srcItr.nextValid()) {
       tgtHllArr.couponUpdate(srcItr.getPair());

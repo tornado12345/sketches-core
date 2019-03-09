@@ -112,8 +112,8 @@ public class UtilTest {
   }
 
   @Test(expectedExceptions = SketchesArgumentException.class)
-  public void checkValidateFractionsException() {
-    Util.validateFractions(null);
+  public void checkValidateValuesNullException() {
+    Util.checkSplitPointsOrder(null);
   }
 
   @Test
@@ -236,12 +236,6 @@ public class UtilTest {
    return brr;
  }
 
- @Test(expectedExceptions = SketchesArgumentException.class)
- public void checkValidateValues() {
-   double[] arr = null;
-   Util.validateValues(arr);
- }
-
  @Test
  public void checkBlockyTandemMergeSort() {
    testBlockyTandemMergeSort(10, 50);
@@ -356,7 +350,7 @@ public class UtilTest {
 
    double D = Util.computeKSDelta(s1, s2);
    double thresh = Util.computeKSThreshold(s1, s2, tgtPvalue);
-   final boolean reject = Util.komologorovSmirnovTest(s1, s2, tgtPvalue);
+   final boolean reject = Util.kolmogorovSmirnovTest(s1, s2, tgtPvalue);
    println("pVal = " + tgtPvalue + "\nK = " + k + "\nD = " + D + "\nTh = " + thresh
        + "\nNull Hypoth Rejected = " + reject);
    assertFalse(reject);
@@ -380,7 +374,7 @@ public class UtilTest {
 
    double D = Util.computeKSDelta(s1, s2);
    double thresh = Util.computeKSThreshold(s1, s2, tgtPvalue);
-   final boolean reject = Util.komologorovSmirnovTest(s1, s2, tgtPvalue);
+   final boolean reject = Util.kolmogorovSmirnovTest(s1, s2, tgtPvalue);
    println("pVal = " + tgtPvalue + "\nK = " + k + "\nD = " + D + "\nTh = " + thresh
        + "\nNull Hypoth Rejected = " + reject);
    assertTrue(reject);

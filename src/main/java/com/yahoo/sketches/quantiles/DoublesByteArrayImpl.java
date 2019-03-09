@@ -21,7 +21,6 @@ import static com.yahoo.sketches.quantiles.PreambleUtil.insertSerVer;
 import java.util.Arrays;
 
 import com.yahoo.memory.WritableMemory;
-
 import com.yahoo.sketches.Family;
 
 /**
@@ -43,22 +42,21 @@ final class DoublesByteArrayImpl {
         | (ordered ? ORDERED_FLAG_MASK : 0)
         | (compact ? (COMPACT_FLAG_MASK | READ_ONLY_FLAG_MASK) : 0);
 
-    if (empty && !sketch.isDirect()) {
+    if (empty && !sketch.isDirect()) { //empty & on-heap
       final byte[] outByteArr = new byte[Long.BYTES];
       final WritableMemory memOut = WritableMemory.wrap(outByteArr);
-      final Object memObj = memOut.getArray();
-      final long memAdd = memOut.getCumulativeOffset(0L);
       final int preLongs = 1;
-      insertPre0(memObj, memAdd, preLongs, flags, sketch.getK());
+      insertPre0(memOut, preLongs, flags, sketch.getK());
       return outByteArr;
     }
-    //not empty || not compact; flags passed for convenience
+    //not empty || direct; flags passed for convenience
     return convertToByteArray(sketch, flags, ordered, compact);
   }
 
   /**
    * Returns a byte array, including preamble, min, max and data extracted from the sketch.
    * @param sketch the given DoublesSketch
+   * @param flags the Flags field
    * @param ordered true if the desired form of the resulting array has the base buffer sorted.
    * @param compact true if the desired form of the resulting array is in compact form.
    * @return a byte array, including preamble, min, max and data extracted from the Combined Buffer.
@@ -79,16 +77,14 @@ final class DoublesByteArrayImpl {
 
     final byte[] outByteArr = new byte[outBytes];
     final WritableMemory memOut = WritableMemory.wrap(outByteArr);
-    final Object memObj = memOut.getArray();
-    final long memAdd = memOut.getCumulativeOffset(0L);
 
     //insert preamble-0, N, min, max
-    insertPre0(memObj, memAdd, preLongs, flags, k);
+    insertPre0(memOut, preLongs, flags, k);
     if (sketch.isEmpty()) { return outByteArr; }
 
-    insertN(memObj, memAdd, n);
-    insertMinDouble(memObj, memAdd, sketch.getMinValue());
-    insertMaxDouble(memObj, memAdd, sketch.getMaxValue());
+    insertN(memOut, n);
+    insertMinDouble(memOut, sketch.getMinValue());
+    insertMaxDouble(memOut, sketch.getMaxValue());
 
     long memOffsetBytes = prePlusExtraBytes;
 
@@ -117,13 +113,13 @@ final class DoublesByteArrayImpl {
     return outByteArr;
   }
 
-  private static void insertPre0(final Object memObj, final long memAdd,
+  private static void insertPre0(final WritableMemory wmem,
       final int preLongs, final int flags, final int k) {
-    insertPreLongs(memObj, memAdd, preLongs);
-    insertSerVer(memObj, memAdd, DoublesSketch.DOUBLES_SER_VER);
-    insertFamilyID(memObj, memAdd, Family.QUANTILES.getID());
-    insertFlags(memObj, memAdd, flags);
-    insertK(memObj, memAdd, k);
+    insertPreLongs(wmem, preLongs);
+    insertSerVer(wmem, DoublesSketch.DOUBLES_SER_VER);
+    insertFamilyID(wmem, Family.QUANTILES.getID());
+    insertFlags(wmem, flags);
+    insertK(wmem, k);
   }
 
 }

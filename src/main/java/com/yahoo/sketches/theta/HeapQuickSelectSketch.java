@@ -35,16 +35,15 @@ import com.yahoo.sketches.Util;
  * @author Lee Rhodes
  * @author Kevin Lang
  */
-final class HeapQuickSelectSketch extends HeapUpdateSketch {
-  //UpdateSketch implements UpdateInternal, SetArgument {
+class HeapQuickSelectSketch extends HeapUpdateSketch {
   private final Family MY_FAMILY;
 
   private final int preambleLongs_;
   private int lgArrLongs_;
   private int hashTableThreshold_;  //never serialized
-  private int curCount_;
-  private long thetaLong_;
-  private boolean empty_;
+  int curCount_;
+  long thetaLong_;
+  boolean empty_;
 
   private long[] cache_;
 
@@ -56,7 +55,7 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
   }
 
   /**
-   * Get a new sketch instance on the java heap.
+   * Construct a new sketch instance on the java heap.
    *
    * @param lgNomLongs <a href="{@docRoot}/resources/dictionary.html#lgNomLogs">See lgNomLongs</a>.
    * @param seed <a href="{@docRoot}/resources/dictionary.html#seed">See seed</a>
@@ -64,33 +63,27 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
    * @param rf <a href="{@docRoot}/resources/dictionary.html#resizeFactor">See Resize Factor</a>
    * @param unionGadget true if this sketch is implementing the Union gadget function.
    * Otherwise, it is behaving as a normal QuickSelectSketch.
-   * @return instance of this sketch
    */
-  static HeapQuickSelectSketch initNewHeapInstance(final int lgNomLongs, final long seed,
-      final float p, final ResizeFactor rf, final boolean unionGadget) {
+  HeapQuickSelectSketch(final int lgNomLongs, final long seed, final float p,
+      final ResizeFactor rf, final boolean unionGadget) {
+    super(lgNomLongs, seed, p, rf);
 
     //Choose family, preambleLongs
-    final Family family;
-    final int preambleLongs;
     if (unionGadget) {
-      preambleLongs = Family.UNION.getMinPreLongs();
-      family = Family.UNION;
+      preambleLongs_ = Family.UNION.getMinPreLongs();
+      MY_FAMILY = Family.UNION;
     }
     else {
-      preambleLongs = Family.QUICKSELECT.getMinPreLongs();
-      family = Family.QUICKSELECT;
+      preambleLongs_ = Family.QUICKSELECT.getMinPreLongs();
+      MY_FAMILY = Family.QUICKSELECT;
     }
 
-    final HeapQuickSelectSketch hqss = new HeapQuickSelectSketch(lgNomLongs, seed, p, rf,
-        preambleLongs, family);
-    final int lgArrLongs = Util.startingSubMultiple(lgNomLongs + 1, rf, MIN_LG_ARR_LONGS);
-    hqss.lgArrLongs_ = lgArrLongs;
-    hqss.hashTableThreshold_ = setHashTableThreshold(lgNomLongs, lgArrLongs);
-    hqss.curCount_ = 0;
-    hqss.thetaLong_ = (long)(p * MAX_THETA_LONG_AS_DOUBLE);
-    hqss.empty_ = true; //other flags: bigEndian = readOnly = compact = ordered = false;
-    hqss.cache_ = new long[1 << lgArrLongs];
-    return hqss;
+    lgArrLongs_ = Util.startingSubMultiple(lgNomLongs + 1, rf, MIN_LG_ARR_LONGS);
+    hashTableThreshold_ = setHashTableThreshold(lgNomLongs, lgArrLongs_);
+    curCount_ = 0;
+    thetaLong_ = (long)(p * MAX_THETA_LONG_AS_DOUBLE);
+    empty_ = true; //other flags: bigEndian = readOnly = compact = ordered = false;
+    cache_ = new long[1 << lgArrLongs_];
   }
 
   /**
@@ -102,20 +95,17 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
    * @return instance of this sketch
    */
   static HeapQuickSelectSketch heapifyInstance(final Memory srcMem, final long seed) {
-    final Object memObj = ((WritableMemory)srcMem).getArray(); //may be null
-    final long memAdd = srcMem.getCumulativeOffset(0L);
+    final int preambleLongs = extractPreLongs(srcMem);            //byte 0
+    final int lgNomLongs = extractLgNomLongs(srcMem);             //byte 3
+    final int lgArrLongs = extractLgArrLongs(srcMem);             //byte 4
 
-    final int preambleLongs = extractPreLongs(memObj, memAdd);            //byte 0
-    final int lgNomLongs = extractLgNomLongs(memObj, memAdd);             //byte 3
-    final int lgArrLongs = extractLgArrLongs(memObj, memAdd);             //byte 4
+    checkUnionQuickSelectFamily(srcMem, preambleLongs, lgNomLongs);
+    checkMemIntegrity(srcMem, seed, preambleLongs, lgNomLongs, lgArrLongs);
 
-    checkUnionQuickSelectFamily(memObj, memAdd, preambleLongs, lgNomLongs);
-    checkMemIntegrity(srcMem, memObj, memAdd, seed, preambleLongs, lgNomLongs, lgArrLongs);
-
-    final float p = extractP(memObj, memAdd);                             //bytes 12-15
-    final int lgRF = extractLgResizeFactor(memObj, memAdd);               //byte 0
+    final float p = extractP(srcMem);                             //bytes 12-15
+    final int lgRF = extractLgResizeFactor(srcMem);               //byte 0
     ResizeFactor myRF = ResizeFactor.getRF(lgRF);
-    final int familyID = extractFamilyID(memObj, memAdd);
+    final int familyID = extractFamilyID(srcMem);
     final Family family = Family.idToFamily(familyID);
 
     if ((myRF == ResizeFactor.X1)
@@ -127,9 +117,9 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
         preambleLongs, family);
     hqss.lgArrLongs_ = lgArrLongs;
     hqss.hashTableThreshold_ = setHashTableThreshold(lgNomLongs, lgArrLongs);
-    hqss.curCount_ = extractCurCount(memObj, memAdd);
-    hqss.thetaLong_ = extractThetaLong(memObj, memAdd);
-    hqss.empty_ = PreambleUtil.isEmpty(memObj, memAdd);
+    hqss.curCount_ = extractCurCount(srcMem);
+    hqss.thetaLong_ = extractThetaLong(srcMem);
+    hqss.empty_ = PreambleUtil.isEmpty(srcMem);
     hqss.cache_ = new long[1 << lgArrLongs];
     srcMem.getLongArray(preambleLongs << 3, hqss.cache_, 0, 1 << lgArrLongs); //read in as hash table
     return hqss;
@@ -138,8 +128,23 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
   //Sketch
 
   @Override
+  public Family getFamily() {
+    return MY_FAMILY;
+  }
+
+  @Override
+  public HashIterator iterator() {
+    return new HeapHashIterator(cache_, 1 << lgArrLongs_, thetaLong_);
+  }
+
+  @Override
   public int getRetainedEntries(final boolean valid) {
     return curCount_;
+  }
+
+  @Override
+  public long getThetaLong() {
+    return thetaLong_;
   }
 
   @Override
@@ -150,11 +155,6 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
   @Override
   public byte[] toByteArray() {
     return toByteArray(preambleLongs_, (byte) MY_FAMILY.getID());
-  }
-
-  @Override
-  public Family getFamily() {
-    return MY_FAMILY;
   }
 
   //UpdateSketch
@@ -168,7 +168,7 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
   }
 
   @Override
-  public final void reset() {
+  public void reset() {
     final ResizeFactor rf = getResizeFactor();
     final int lgArrLongsSM = Util.startingSubMultiple(lgNomLongs_ + 1, rf, MIN_LG_ARR_LONGS);
     if (lgArrLongsSM == lgArrLongs_) {
@@ -189,34 +189,29 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
   //restricted methods
 
   @Override
-  int getCurrentPreambleLongs(final boolean compact) {
-    if (!compact) { return preambleLongs_; }
-    return computeCompactPreLongs(thetaLong_, empty_, curCount_);
-  }
-
-  @Override
-  WritableMemory getMemory() {
-    return null;
-  }
-
-  @Override
   long[] getCache() {
     return cache_;
   }
 
   @Override
-  long getThetaLong() {
-    return thetaLong_;
+  int getCurrentPreambleLongs(final boolean compact) {
+    if (!compact) { return preambleLongs_; }
+    return computeCompactPreLongs(thetaLong_, empty_, curCount_);
   }
 
-  @Override
-  boolean isDirty() {
-    return false;
+  //only used by ConcurrentHeapThetaBuffer & Test
+  int getHashTableThreshold() {
+    return hashTableThreshold_;
   }
 
   @Override
   int getLgArrLongs() {
     return lgArrLongs_;
+  }
+
+  @Override
+  WritableMemory getMemory() {
+    return null;
   }
 
   @Override
@@ -236,7 +231,7 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
     //insertion occurred, must increment curCount
     curCount_++;
 
-    if (curCount_ > hashTableThreshold_) { //we need to do something, we are out of space
+    if (isOutOfSpace(curCount_)) { //we need to do something, we are out of space
       //must rebuild or resize
       if (lgArrLongs_ <= lgNomLongs_) { //resize
         resizeCache();
@@ -247,7 +242,16 @@ final class HeapQuickSelectSketch extends HeapUpdateSketch {
       }
     }
     return InsertedCountIncremented;
+  }
 
+  @Override
+  boolean isDirty() {
+    return false;
+  }
+
+  @Override
+  boolean isOutOfSpace(final int numEntries) {
+    return numEntries > hashTableThreshold_;
   }
 
   //Must resize. Changes lgArrLongs_ and cache_. theta and count don't change.

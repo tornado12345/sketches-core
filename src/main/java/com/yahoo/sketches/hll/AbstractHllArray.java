@@ -82,7 +82,7 @@ abstract class AbstractHllArray extends HllSketchImpl {
   abstract int getHllByteArrBytes();
 
   @Override
-  abstract PairIterator getIterator();
+  abstract PairIterator iterator();
 
   abstract double getKxQ0();
 
@@ -152,6 +152,7 @@ abstract class AbstractHllArray extends HllSketchImpl {
 
   /**
    * Common HIP and KxQ incremental update for all heap and direct Hll.
+   * @param host the origin implementation
    * @param oldValue old value
    * @param newValue new value
    */

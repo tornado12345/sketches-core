@@ -271,6 +271,7 @@ public class ItemsSketchTest {
     Assert.assertNull(map.getActiveValues());
   }
 
+  @SuppressWarnings("unlikely-arg-type")
   @Test
   public void checkMisc() {
     ItemsSketch<Long> sk1 = new ItemsSketch<>(1 << LG_MIN_MAP_SIZE);
@@ -282,6 +283,9 @@ public class ItemsSketchTest {
     sk1.update(Long.valueOf(1));
     ItemsSketch.Row<Long>[] rows = sk1.getFrequentItems(ErrorType.NO_FALSE_NEGATIVES);
     ItemsSketch.Row<Long> row = rows[0];
+    Assert.assertTrue(row.hashCode() != 0);
+    Assert.assertTrue(row.equals(row));
+    Assert.assertFalse(row.equals(sk1));
     Assert.assertEquals((long)row.getItem(), 1L);
     Assert.assertEquals(row.getEstimate(), 1);
     Assert.assertEquals(row.getUpperBound(), 1);
@@ -289,6 +293,13 @@ public class ItemsSketchTest {
     println(s);
     ItemsSketch.Row<Long> nullRow = null; //check equals(null)
     Assert.assertFalse(row.equals(nullRow));
+  }
+
+  @Test
+  public void checkToString() {
+    ItemsSketch<Long> sk = new ItemsSketch<>(1 << LG_MIN_MAP_SIZE);
+    sk.update(Long.valueOf(1));
+    println(ItemsSketch.toString(sk.toByteArray(new ArrayOfLongsSerDe())));
   }
 
   @Test
@@ -356,6 +367,24 @@ public class ItemsSketchTest {
     Assert.assertEquals(sketch2.getEstimate("\u5fb5"), 1);
   }
 
+  @Test
+  public void checkGetEpsilon() {
+    assertEquals(ItemsSketch.getEpsilon(1024), 3.5 / 1024, 0.0);
+  }
+
+  @Test
+  public void checkGetAprioriError() {
+    double eps = 3.5 / 1024;
+    assertEquals(ItemsSketch.getAprioriError(1024, 10_000), eps * 10_000);
+  }
+
+  @Test
+  public void printlnTest() {
+    println("PRINTING: " + this.getClass().getName());
+  }
+
+  //Restricted methods
+
   private static void tryBadMem(WritableMemory mem, int byteOffset, int byteValue) {
     ArrayOfLongsSerDe serDe = new ArrayOfLongsSerDe();
     try {
@@ -367,15 +396,11 @@ public class ItemsSketchTest {
     }
   }
 
-  @Test
-  public void printlnTest() {
-    println("PRINTING: " + this.getClass().getName());
-  }
 
   /**
    * @param s value to print
    */
   static void println(String s) {
-    //System.err.println(s); //disable here
+    //System.out.println(s); //disable here
   }
 }

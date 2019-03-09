@@ -42,6 +42,7 @@ import static org.testng.Assert.fail;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import com.yahoo.memory.Memory;
 import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.Family;
 import com.yahoo.sketches.SketchesArgumentException;
@@ -61,7 +62,7 @@ public class PreambleUtilTest {
     WritableMemory mem = WritableMemory.wrap(byteArray);
 
     UpdateSketch quick1 = UpdateSketch.builder().setNominalEntries(k).build(mem);
-    println(PreambleUtil.preambleToString(byteArray));
+    println(Sketch.toString(byteArray));
 
     Assert.assertTrue(quick1.isEmpty());
 
@@ -90,14 +91,14 @@ public class PreambleUtilTest {
       quick1.update(i);
     }
     byte[] bytes = quick1.compact().toByteArray();
-    println(PreambleUtil.preambleToString(bytes));
+    println(Sketch.toString(bytes));
   }
 
   @Test
   public void checkPreambleToStringExceptions() {
     byte[] byteArr = new byte[7];
     try { //check preLongs < 8 fails
-      PreambleUtil.preambleToString(byteArr);
+      Sketch.toString(byteArr);
       fail("Did not throw SketchesArgumentException.");
     } catch (SketchesArgumentException e) {
       //expected
@@ -105,7 +106,7 @@ public class PreambleUtilTest {
     byteArr = new byte[8];
     byteArr[0] = (byte) 2; //needs min capacity of 16
     try { //check preLongs == 2 fails
-      PreambleUtil.preambleToString(byteArr);
+      Sketch.toString(Memory.wrap(byteArr));
       fail("Did not throw SketchesArgumentException.");
     } catch (SketchesArgumentException e) {
       //expected
@@ -123,72 +124,70 @@ public class PreambleUtilTest {
     UpdateSketch sketch = UpdateSketch.builder().setNominalEntries(16).build();
     CompactSketch comp = sketch.compact(false, null);
     byte[] byteArr = comp.toByteArray();
-    println(PreambleUtil.preambleToString(byteArr)); //PreLongs = 1
+    println(Sketch.toString(byteArr)); //PreLongs = 1
 
     sketch.update(1);
     comp = sketch.compact(false, null);
     byteArr = comp.toByteArray();
-    println(PreambleUtil.preambleToString(byteArr)); //PreLongs = 2
+    println(Sketch.toString(byteArr)); //PreLongs = 2
 
     for (int i=2; i<=32; i++) {
       sketch.update(i);
     }
     comp = sketch.compact(false, null);
     byteArr = comp.toByteArray();
-    println(PreambleUtil.preambleToString(byteArr)); //PreLongs = 3
+    println(Sketch.toString(Memory.wrap(byteArr))); //PreLongs = 3
   }
 
   @Test
   public void checkInsertsAndExtracts() {
     byte[] arr = new byte[32];
     WritableMemory mem = WritableMemory.wrap(arr);
-    Object memObj = mem.getArray(); //may be null
-    long memAdd = mem.getCumulativeOffset(0L);
 
     int v = 0;
-    insertPreLongs(memObj, memAdd, ++v);
-    assertEquals(extractPreLongs(memObj, memAdd), v);
+    insertPreLongs(mem, ++v);
+    assertEquals(extractPreLongs(mem), v);
 
-    insertLgResizeFactor(memObj, memAdd, 3); //limited to 2 bits
-    assertEquals(extractLgResizeFactor(memObj, memAdd), 3);
+    insertLgResizeFactor(mem, 3); //limited to 2 bits
+    assertEquals(extractLgResizeFactor(mem), 3);
 
-    insertSerVer(memObj, memAdd, ++v);
-    assertEquals(extractSerVer(memObj, memAdd), v);
+    insertSerVer(mem, ++v);
+    assertEquals(extractSerVer(mem), v);
 
-    insertFamilyID(memObj, memAdd, ++v);
-    assertEquals(extractFamilyID(memObj, memAdd), v);
+    insertFamilyID(mem, ++v);
+    assertEquals(extractFamilyID(mem), v);
 
-    insertLgNomLongs(memObj, memAdd, ++v);
-    assertEquals(extractLgNomLongs(memObj, memAdd), v);
+    insertLgNomLongs(mem, ++v);
+    assertEquals(extractLgNomLongs(mem), v);
 
-    insertLgArrLongs(memObj, memAdd, ++v);
-    assertEquals(extractLgArrLongs(memObj, memAdd), v);
+    insertLgArrLongs(mem, ++v);
+    assertEquals(extractLgArrLongs(mem), v);
 
-    insertFlags(memObj, memAdd, 3);
-    assertEquals(extractFlags(memObj, memAdd), 3);
-    assertEquals(extractLgResizeRatioV1(memObj, memAdd), 3); //also at byte 5, limited to 2 bits
+    insertFlags(mem, 3);
+    assertEquals(extractFlags(mem), 3);
+    assertEquals(extractLgResizeRatioV1(mem), 3); //also at byte 5, limited to 2 bits
 
-    insertSeedHash(memObj, memAdd, ++v);
-    assertEquals(extractSeedHash(memObj, memAdd), v);
-    assertEquals(extractFlagsV1(memObj, memAdd), v); //also at byte 6
+    insertSeedHash(mem, ++v);
+    assertEquals(extractSeedHash(mem), v);
+    assertEquals(extractFlagsV1(mem), v); //also at byte 6
 
-    insertCurCount(memObj, memAdd, ++v);
-    assertEquals(extractCurCount(memObj, memAdd), v);
+    insertCurCount(mem, ++v);
+    assertEquals(extractCurCount(mem), v);
 
-    insertP(memObj, memAdd, (float) 1.0);
-    assertEquals(extractP(memObj, memAdd), (float) 1.0);
+    insertP(mem, (float) 1.0);
+    assertEquals(extractP(mem), (float) 1.0);
 
-    insertThetaLong(memObj, memAdd, ++v);
-    assertEquals(extractThetaLong(memObj, memAdd), v);
+    insertThetaLong(mem, ++v);
+    assertEquals(extractThetaLong(mem), v);
 
-    insertUnionThetaLong(memObj, memAdd, ++v);
-    assertEquals(extractUnionThetaLong(memObj, memAdd), v);
+    insertUnionThetaLong(mem, ++v);
+    assertEquals(extractUnionThetaLong(mem), v);
 
-    setEmpty(memObj, memAdd);
-    assertTrue(isEmpty(memObj, memAdd));
+    setEmpty(mem);
+    assertTrue(isEmpty(mem));
 
-    clearEmpty(memObj, memAdd);
-    assertFalse(isEmpty(memObj, memAdd));
+    clearEmpty(mem);
+    assertFalse(isEmpty(mem));
   }
 
   @Test

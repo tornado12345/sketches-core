@@ -62,9 +62,8 @@ class DoublesUnionImplR extends DoublesUnion {
   public byte[] toByteArray() {
     if (gadget_ == null) {
       return DoublesSketch.builder().setK(maxK_).build().toByteArray();
-    } else {
-      return gadget_.toByteArray();
     }
+    return gadget_.toByteArray();
   }
 
   @Override
@@ -141,8 +140,8 @@ class DoublesUnionImplR extends DoublesUnion {
   }
 
   @Override
-  public boolean isSameResource(final Memory mem) {
-    return (gadget_ == null) ? false : gadget_.isSameResource(mem);
+  public boolean isSameResource(final Memory that) {
+    return (gadget_ == null) ? false : gadget_.isSameResource(that);
   }
 
 }

@@ -68,6 +68,7 @@ final class DoublesUtil {
   /**
    * Check the validity of the given serialization version
    * @param serVer the given serialization version
+   * @param minSupportedSerVer the oldest serialization version supported
    */
   static void checkDoublesSerVer(final int serVer, final int minSupportedSerVer) {
     final int max = DoublesSketch.DOUBLES_SER_VER;
@@ -137,9 +138,9 @@ final class DoublesUtil {
     sb.append("   Normalized Rank Error        : ").append(epsPctStr).append(LS);
     sb.append("   Normalized Rank Error (PMF)  : ").append(epsPmfPctStr).append(LS);
     sb.append("   Min Value                    : ")
-      .append(String.format("%,.3f", sk.getMinValue())).append(LS);
+      .append(String.format("%12.6e", sk.getMinValue())).append(LS);
     sb.append("   Max Value                    : ")
-      .append(String.format("%,.3f", sk.getMaxValue())).append(LS);
+      .append(String.format("%12.6e", sk.getMaxValue())).append(LS);
     sb.append("### END SKETCH SUMMARY").append(LS);
     return sb.toString();
   }

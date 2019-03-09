@@ -10,6 +10,7 @@ import org.testng.annotations.Test;
 
 import com.yahoo.memory.Memory;
 import com.yahoo.sketches.SketchesArgumentException;
+import com.yahoo.sketches.tuple.TestUtil;
 
 public class KllFloatsSketchTest {
 
@@ -36,10 +37,17 @@ public class KllFloatsSketchTest {
   }
 
   @Test(expectedExceptions = SketchesArgumentException.class)
-  public void checkBadGetQuantiles() {
+  public void getQuantileInvalidArg() {
     final KllFloatsSketch sketch = new KllFloatsSketch();
     sketch.update(1);
     sketch.getQuantile(-1.0);
+  }
+
+  @Test(expectedExceptions = SketchesArgumentException.class)
+  public void getQuantilesInvalidArg() {
+    final KllFloatsSketch sketch = new KllFloatsSketch();
+    sketch.update(1);
+    sketch.getQuantiles(new double[] {2.0});
   }
 
   @Test
@@ -67,7 +75,7 @@ public class KllFloatsSketchTest {
 
     // test getRank
     for (int i = 0; i < n; i++) {
-      final double trueRank = (double) i / (n - 1);
+      final double trueRank = (double) i / n;
       assertEquals(sketch.getRank(i), trueRank, PMF_EPS_FOR_K_256, "for value " + i);
     }
 
@@ -147,8 +155,8 @@ public class KllFloatsSketchTest {
       sketch2.update((2 * n) - i - 1);
     }
 
-    assertEquals(sketch2.getMinValue(), (float) n);
-    assertEquals(sketch2.getMaxValue(), (float) ((2 * n) - 1));
+    assertEquals(sketch1.getMinValue(), 0.0f);
+    assertEquals(sketch1.getMaxValue(), (float) (n - 1));
 
     assertEquals(sketch2.getMinValue(), (float) n);
     assertEquals(sketch2.getMaxValue(), (float) ((2 * n) - 1));
@@ -172,8 +180,8 @@ public class KllFloatsSketchTest {
       sketch2.update((2 * n) - i - 1);
     }
 
-    assertEquals(sketch2.getMinValue(), (float) n);
-    assertEquals(sketch2.getMaxValue(), (float) ((2 * n) - 1));
+    assertEquals(sketch1.getMinValue(), 0.0f);
+    assertEquals(sketch1.getMaxValue(), (float) (n - 1));
 
     assertEquals(sketch2.getMinValue(), (float) n);
     assertEquals(sketch2.getMaxValue(), (float) ((2 * n) - 1));
@@ -202,7 +210,7 @@ public class KllFloatsSketchTest {
       sketch1.update(i);
     }
 
-    // rank error should not be affected by a merge with an empty sketch
+    // rank error should not be affected by a merge with an empty sketch with lower K
     final double rankErrorBeforeMerge = sketch1.getNormalizedRankError(true);
     sketch1.merge(sketch2);
     assertEquals(sketch1.getNormalizedRankError(true), rankErrorBeforeMerge);
@@ -223,13 +231,41 @@ public class KllFloatsSketchTest {
   }
 
   @Test
-  public void checkMergeUseOtherMinValue() {
+  public void mergeExactModeLowerK() {
+    final KllFloatsSketch sketch1 = new KllFloatsSketch(256);
+    final KllFloatsSketch sketch2 = new KllFloatsSketch(128);
+    final int n = 10000;
+    for (int i = 0; i < n; i++) {
+      sketch1.update(i);
+    }
+    sketch2.update(1);
+
+    // rank error should not be affected by a merge with a sketch in exact mode with lower K
+    final double rankErrorBeforeMerge = sketch1.getNormalizedRankError(true);
+    sketch1.merge(sketch2);
+    assertEquals(sketch1.getNormalizedRankError(true), rankErrorBeforeMerge);
+  }
+
+  @Test
+  public void mergeMinMinValueFromOther() {
     final KllFloatsSketch sketch1 = new KllFloatsSketch();
     final KllFloatsSketch sketch2 = new KllFloatsSketch();
     sketch1.update(1);
     sketch2.update(2);
     sketch2.merge(sketch1);
     assertEquals(sketch2.getMinValue(), 1.0F);
+  }
+
+  @Test
+  public void mergeMinAndMaxFromOther() {
+    final KllFloatsSketch sketch1 = new KllFloatsSketch();
+    for (int i = 0; i < 1000000; i++) {
+      sketch1.update(i);
+    }
+    final KllFloatsSketch sketch2 = new KllFloatsSketch();
+    sketch2.merge(sketch1);
+    assertEquals(sketch2.getMinValue(), 0F);
+    assertEquals(sketch2.getMaxValue(), 999999F);
   }
 
   @SuppressWarnings("unused")
@@ -250,6 +286,7 @@ public class KllFloatsSketchTest {
     for (int i = 0; i < 1000; i++) {
       sketch.update(i);
     }
+    assertEquals(sketch.getK(), KllFloatsSketch.MIN_K);
     assertEquals(sketch.getQuantile(0.5), 500, 500 * PMF_EPS_FOR_K_8);
   }
 
@@ -259,6 +296,7 @@ public class KllFloatsSketchTest {
     for (int i = 0; i < 1000; i++) {
       sketch.update(i);
     }
+    assertEquals(sketch.getK(), KllFloatsSketch.MAX_K);
     assertEquals(sketch.getQuantile(0.5), 500, 500 * PMF_EPS_FOR_K_256);
   }
 
@@ -275,6 +313,32 @@ public class KllFloatsSketchTest {
     assertTrue(Float.isNaN(sketch2.getMinValue()));
     assertTrue(Float.isNaN(sketch2.getMaxValue()));
     assertEquals(sketch2.getSerializedSizeBytes(), sketch1.getSerializedSizeBytes());
+  }
+
+  @Test
+  public void serializeDeserializeOneItem() {
+    final KllFloatsSketch sketch1 = new KllFloatsSketch();
+    sketch1.update(1);
+    final byte[] bytes = sketch1.toByteArray();
+    KllFloatsSketch sketch2 = KllFloatsSketch.heapify(Memory.wrap(bytes));
+    assertEquals(bytes.length, sketch1.getSerializedSizeBytes());
+    assertFalse(sketch2.isEmpty());
+    assertEquals(sketch2.getNumRetained(), 1);
+    assertEquals(sketch2.getN(), 1);
+    assertEquals(sketch2.getNormalizedRankError(false), sketch1.getNormalizedRankError(false));
+    assertFalse(Float.isNaN(sketch2.getMinValue()));
+    assertFalse(Float.isNaN(sketch2.getMaxValue()));
+    assertEquals(sketch2.getSerializedSizeBytes(), 12);
+  }
+
+  @Test
+  public void deserializeOneItemV1() throws Exception {
+    byte[] bytes = TestUtil.readBytesFromFile(getClass().getClassLoader().getResource("kll_sketch_float_one_item_v1.bin").getFile());
+    KllFloatsSketch sketch = KllFloatsSketch.heapify(Memory.wrap(bytes));
+    assertFalse(sketch.isEmpty());
+    assertFalse(sketch.isEstimationMode());
+    assertEquals(sketch.getN(), 1);
+    assertEquals(sketch.getNumRetained(), 1);
   }
 
   @Test
@@ -326,6 +390,20 @@ public class KllFloatsSketchTest {
   public void checkIntCapAux() {
     final int lvlCap = KllHelper.levelCapacity(10, 100, 50, 8);
     assertEquals(lvlCap, 8);
+  }
+
+  @Test
+  public void getQuantiles() {
+    final KllFloatsSketch sketch = new KllFloatsSketch();
+    sketch.update(1);
+    sketch.update(2);
+    sketch.update(3);
+    final float[] quantiles1 = sketch.getQuantiles(new double[] {0, 0.5, 1}); 
+    final float[] quantiles2 = sketch.getQuantiles(3);
+    assertEquals(quantiles1, quantiles2);
+    assertEquals(quantiles1[0], 1f);
+    assertEquals(quantiles1[1], 2f);
+    assertEquals(quantiles1[2], 3f);
   }
 
 }

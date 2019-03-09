@@ -6,6 +6,8 @@
 package com.yahoo.sketches;
 
 import static com.yahoo.sketches.hash.MurmurHash3.hash;
+import static java.lang.Math.ceil;
+import static java.lang.Math.floor;
 import static java.lang.Math.log;
 import static java.lang.Math.pow;
 import static java.lang.Math.round;
@@ -63,7 +65,13 @@ public final class Util {
    * function and seed are identical for both sketches, otherwise the assumed 1:1 relationship
    * between the original source key value and the hashed bit string would be violated. Once
    * you have developed a history of stored sketches you are stuck with it.
-   * <a href="{@docRoot}/resources/dictionary.html#defaultUpdateSeed">See Default Update Seed</a>
+   *
+   * <p><b>WARNING:</b> This seed is used internally by library sketches in different
+   * packages and thus must be declared public. However, this seed value must not be used by library
+   * users with the MurmurHash3 function. It should be viewed as existing for exclusive, private
+   * use by the library.
+   *
+   * <p><a href="{@docRoot}/resources/dictionary.html#defaultUpdateSeed">See Default Update Seed</a>
    */
   public static final long DEFAULT_UPDATE_SEED = 9001L;
 
@@ -81,6 +89,17 @@ public final class Util {
    * The natural logarithm of 2.0.
    */
   public static final double LOG2 = log(2.0);
+
+  /**
+   * The inverse golden ratio as an unsigned long.
+   */
+  public static final long iGoldenU64 = 0x9e3779b97f4a7c13L;
+
+  /**
+   * The inverse golden ratio as a fraction.
+   * This has more precision than using the formula: (Math.sqrt(5.0) - 1.0) / 2.0.
+   */
+  public static final double iGolden = 0.6180339887498949025; // the inverse golden ratio
 
   private Util() {}
 
@@ -197,7 +216,7 @@ public final class Util {
     final String nSstr = zeroPad(Long.toString(rem_nS), 3);
     final String uSstr = zeroPad(Long.toString(rem_uS), 3);
     final String mSstr = zeroPad(Long.toString(rem_mS), 3);
-    return String.format("%d.%3s %3s %3s", sec, mSstr, uSstr, nSstr);
+    return String.format("%d.%3s_%3s_%3s", sec, mSstr, uSstr, nSstr);
   }
 
   /**
@@ -301,7 +320,7 @@ public final class Util {
     return seedHash;
   }
 
-  //Memory byte allignment
+  //Memory byte alignment
 
   /**
    * Checks if parameter v is a multiple of 8 and greater than zero.
@@ -366,13 +385,15 @@ public final class Util {
 
   /**
    * Computes the ceiling power of 2 within the range [1, 2^30]. This is the smallest positive power
-   * of 2 that equal to or greater than the given n. <br>
-   * For:
+   * of 2 that equal to or greater than the given n and equal to a mathematical integer.
+   *
+   * <p>For:
    * <ul>
    * <li>n &le; 1: returns 1</li>
    * <li>2^30 &le; n &le; 2^31 -1 : returns 2^30</li>
    * <li>n == a power of 2 : returns n</li>
-   * <li>otherwise returns the smallest power of 2 greater than n</li>
+   * <li>otherwise returns the smallest power of 2 greater than n and equal to a mathematical
+   * integer</li>
    * </ul>
    *
    * @param n The input argument.
@@ -386,13 +407,15 @@ public final class Util {
 
   /**
    * Computes the floor power of 2 within the range [1, 2^30]. This is the largest positive power of
-   * 2 that equal to or less than the given n. <br>
-   * For:
+   * 2 that equal to or less than the given n and equal to a mathematical integer.
+   *
+   * <p>For:
    * <ul>
    * <li>n &le; 1: returns 1</li>
    * <li>2^30 &le; n &le; 2^31 -1 : returns 2^30</li>
    * <li>n == a power of 2 : returns n</li>
-   * <li>otherwise returns the largest power of 2 less than n</li>
+   * <li>otherwise returns the largest power of 2 less than n and equal to a mathematical
+   * integer.</li>
    * </ul>
    *
    * @param n The given argument.
@@ -498,7 +521,7 @@ public final class Util {
     int prev;
     do {
       prev = (int)round(pow(2.0, (double) --gi / ppo));
-    } while ( (prev >= curPoint) && (prev > 1));
+    } while (prev >= curPoint);
     return prev;
   }
 
@@ -515,13 +538,15 @@ public final class Util {
   /**
    * Gives the log2 of an integer that is known to be a power of 2.
    *
-   * @param x number
+   * @param x number that is greater than zero
    * @return the log2 of an integer that is known to be a power of 2.
    */
   public static int simpleIntLog2(final int x) {
-    final int e = Integer.numberOfTrailingZeros(x);
-    assert (x == (1 << e));
-    return e;
+    final int exp = Integer.numberOfTrailingZeros(x);
+    if (x != (1 << exp)) {
+      throw new SketchesArgumentException("Argument x cannot be negative or zero.");
+    }
+    return exp;
   }
 
   /**
@@ -537,6 +562,84 @@ public final class Util {
       final int lgMin) {
     final int lgRF = rf.lg();
     return (lgTarget <= lgMin) ? lgMin : (lgRF == 0) ? lgTarget : ((lgTarget - lgMin) % lgRF) + lgMin;
+  }
+
+  //log_base or power_base related
+
+  /**
+   * Computes the ceiling power of B as a double. This is the smallest positive power
+   * of B that equal to or greater than the given n and equal to a mathematical integer.
+   * The result of this function is consistent with {@link #ceilingPowerOf2(int)} for values
+   * less than one. I.e., if <i>n &lt; 1,</i> the result is 1.
+   *
+   * @param b The base in the expression &#8968;b<sup>n</sup>&#8969;.
+   * @param n The input argument.
+   * @return the ceiling power of B as a double and equal to a mathematical integer.
+   */
+  public static double ceilingPowerOfBdouble(final double b, final double n) {
+    final double x = (n < 1.0) ? 1.0 : n;
+    return pow(b, ceil(logB(b, x)));
+  }
+
+  /**
+   * Computes the floor power of B as a double. This is the largest positive power
+   * of B that equal to or less than the given n and equal to a mathematical integer.
+   * The result of this function is consistent with {@link #floorPowerOf2(int)} for values
+   * less than one. I.e., if <i>n &lt; 1,</i> the result is 1.
+   *
+   * @param b The base in the expression &#8970;b<sup>n</sup>&#8971;.
+   * @param n The input argument.
+   * @return the floor power of 2 and equal to a mathematical integer.
+   */
+  public static double floorPowerOfBdouble(final double b, final double n) {
+    final double x = (n < 1.0) ? 1.0 : n;
+    return pow(b, floor(logB(b, x)));
+  }
+
+  /**
+   * Returns the logarithm_logBase of x. Example: logB(2.0, x) = log(x) / log(2.0).
+   * @param logBase the base of the logarithm used
+   * @param x the given value
+   * @return the logarithm_logBase of x: Example: logB(2.0, x) = log(x) / log(2.0).
+   */
+  public static final double logB(final double logBase, final double x) {
+    return log(x) / log(logBase);
+  }
+
+  /**
+   * Computes the next larger double in the power series
+   * <i>point = logBase<sup>( i / ppo )</sup></i> given the current point in the series.
+   * For illustration, this can be used in a loop as follows:
+   *
+   * <pre>{@code
+   *     double maxP = 1024.0;
+   *     double minP = 1.0;
+   *     int ppo = 2;
+   *     double logBase = 2.0;
+   *
+   *     for (double p = minP; p <= maxP; p = pwr2LawNextDouble(ppo, p, true, logBase)) {
+   *       System.out.print(Math.round(p) + " ");
+   *     }
+   *     //generates the following series:
+   *     //1 2 3 4 6 8 11 16 23 32 45 64 91 128 181 256 362 512 724 1024
+   * }</pre>
+   *
+   * @param ppo Points-Per-Octave, or the number of points per integer powers of 2 in the series.
+   * @param curPoint the current point of the series. Must be &ge; 1.0.
+   * @param roundToInt if true the output will be rounded to the nearest integer.
+   * @param logBase the desired base of the logarithms
+   * @return the next point in the power series.
+   */
+  public static final double pwrLawNextDouble(final int ppo, final double curPoint,
+      final boolean roundToInt, final double logBase) {
+    final double cur = (curPoint < 1.0) ? 1.0 : curPoint;
+    double gi = round((logB(logBase, cur) * ppo) ); //current generating index
+    double next;
+    do {
+      final double n = pow(logBase, ++gi / ppo);
+      next = roundToInt ? round(n) : n;
+    } while (next <= cur);
+    return next;
   }
 
   //Other checks

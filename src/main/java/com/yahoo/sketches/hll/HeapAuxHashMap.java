@@ -5,17 +5,13 @@
 
 package com.yahoo.sketches.hll;
 
-import static com.yahoo.sketches.Util.ceilingPowerOf2;
-import static com.yahoo.sketches.Util.simpleIntLog2;
 import static com.yahoo.sketches.hll.HllUtil.EMPTY;
-import static com.yahoo.sketches.hll.HllUtil.LG_AUX_ARR_INTS;
 import static com.yahoo.sketches.hll.HllUtil.RESIZE_DENOM;
 import static com.yahoo.sketches.hll.HllUtil.RESIZE_NUMER;
 import static com.yahoo.sketches.hll.PreambleUtil.extractInt;
 import static com.yahoo.sketches.hll.PreambleUtil.extractLgArr;
 
 import com.yahoo.memory.Memory;
-import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.SketchesArgumentException;
 import com.yahoo.sketches.SketchesStateException;
 
@@ -31,6 +27,7 @@ class HeapAuxHashMap implements AuxHashMap {
 
   /**
    * Standard constructor
+   * @param lgAuxArrInts the log size of the aux integer array
    * @param lgConfigK must be 7 to 21
    */
   HeapAuxHashMap(final int lgAuxArrInts, final int lgConfigK) {
@@ -52,19 +49,12 @@ class HeapAuxHashMap implements AuxHashMap {
 
   static final HeapAuxHashMap heapify(final Memory mem, final long offset, final int lgConfigK,
       final int auxCount, final boolean srcCompact) {
-    final Object memObj = ((WritableMemory) mem).getArray();
-    final long memAdd = mem.getCumulativeOffset(0);
-
     final int lgAuxArrInts;
     final HeapAuxHashMap auxMap;
-    if (srcCompact) { //prior versions did not use LgArr byte field
-      int ceilInts = ceilingPowerOf2(auxCount);
-      if ((RESIZE_DENOM * auxCount) > (RESIZE_NUMER * ceilInts)) {
-        ceilInts <<= 1;
-      }
-      lgAuxArrInts = simpleIntLog2(Math.max(ceilInts, 1 << LG_AUX_ARR_INTS[lgConfigK]));
+    if (srcCompact) { //early versions did not use LgArr byte field
+      lgAuxArrInts = PreambleUtil.computeLgArr(mem, auxCount, lgConfigK);
     } else { //updatable
-      lgAuxArrInts = extractLgArr(memObj, memAdd);
+      lgAuxArrInts = extractLgArr(mem);
     }
     auxMap = new HeapAuxHashMap(lgAuxArrInts, lgConfigK);
 
@@ -72,7 +62,7 @@ class HeapAuxHashMap implements AuxHashMap {
 
     if (srcCompact) {
       for (int i = 0; i < auxCount; i++) {
-        final int pair = extractInt(memObj, memAdd, offset + (i << 2));
+        final int pair = extractInt(mem, offset + (i << 2));
         final int slotNo = HllUtil.getLow26(pair) & configKmask;
         final int value = HllUtil.getValue(pair);
         auxMap.mustAdd(slotNo, value); //increments count
@@ -80,7 +70,7 @@ class HeapAuxHashMap implements AuxHashMap {
     } else { //updatable
       final int auxArrInts = 1 << lgAuxArrInts;
       for (int i = 0; i < auxArrInts; i++) {
-        final int pair = extractInt(memObj, memAdd, offset + (i << 2));
+        final int pair = extractInt(mem, offset + (i << 2));
         if (pair == EMPTY) { continue; }
         final int slotNo = HllUtil.getLow26(pair) & configKmask;
         final int value = HllUtil.getValue(pair);

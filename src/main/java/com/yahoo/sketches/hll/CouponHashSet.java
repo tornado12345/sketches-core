@@ -6,11 +6,13 @@
 package com.yahoo.sketches.hll;
 
 import static com.yahoo.sketches.hll.HllUtil.EMPTY;
+import static com.yahoo.sketches.hll.HllUtil.LG_INIT_SET_SIZE;
 import static com.yahoo.sketches.hll.HllUtil.RESIZE_DENOM;
 import static com.yahoo.sketches.hll.HllUtil.RESIZE_NUMER;
 import static com.yahoo.sketches.hll.PreambleUtil.HASH_SET_INT_ARR_START;
 import static com.yahoo.sketches.hll.PreambleUtil.HASH_SET_PREINTS;
 import static com.yahoo.sketches.hll.PreambleUtil.LIST_INT_ARR_START;
+import static com.yahoo.sketches.hll.PreambleUtil.computeLgArr;
 import static com.yahoo.sketches.hll.PreambleUtil.extractCompactFlag;
 import static com.yahoo.sketches.hll.PreambleUtil.extractCurMode;
 import static com.yahoo.sketches.hll.PreambleUtil.extractHashSetCount;
@@ -20,7 +22,6 @@ import static com.yahoo.sketches.hll.PreambleUtil.extractLgK;
 import static com.yahoo.sketches.hll.PreambleUtil.extractTgtHllType;
 
 import com.yahoo.memory.Memory;
-import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.SketchesStateException;
 
 /**
@@ -58,24 +59,22 @@ class CouponHashSet extends CouponList {
 
   //will also accept List, but results in a Set
   static final CouponHashSet heapifySet(final Memory mem) {
-    final Object memObj = ((WritableMemory) mem).getArray();
-    final long memAdd = mem.getCumulativeOffset(0);
+    final int lgConfigK = extractLgK(mem);
+    final TgtHllType tgtHllType = extractTgtHllType(mem);
 
-    final int lgConfigK = extractLgK(memObj, memAdd);
-    final TgtHllType tgtHllType = extractTgtHllType(memObj, memAdd);
-    final int lgCouponArrInts = extractLgArr(memObj, memAdd);
-    final CurMode curMode = extractCurMode(memObj, memAdd);
+    final CurMode curMode = extractCurMode(mem);
     final int memArrStart = (curMode == CurMode.LIST) ? LIST_INT_ARR_START : HASH_SET_INT_ARR_START;
-
     final CouponHashSet set = new CouponHashSet(lgConfigK, tgtHllType);
     set.putOutOfOrderFlag(true);
-    final boolean memIsCompact = extractCompactFlag(memObj, memAdd);
-    final int couponCount = extractHashSetCount(memObj, memAdd);
+    final boolean memIsCompact = extractCompactFlag(mem);
+    final int couponCount = extractHashSetCount(mem);
+    int lgCouponArrInts = extractLgArr(mem);
+    if (lgCouponArrInts < LG_INIT_SET_SIZE) {
+      lgCouponArrInts = computeLgArr(mem, couponCount, lgConfigK);
+    }
     if (memIsCompact) {
       for (int i = 0; i < couponCount; i++) {
-        final int coupon = extractInt(memObj, memAdd, memArrStart + (i << 2));
-        if (coupon == EMPTY) { continue; }
-        set.couponUpdate(coupon);
+        set.couponUpdate(extractInt(mem, memArrStart + (i << 2)));
       }
     } else { //updatable
       set.couponCount = couponCount;

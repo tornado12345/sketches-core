@@ -9,7 +9,6 @@ import static com.yahoo.sketches.Util.DEFAULT_UPDATE_SEED;
 import static com.yahoo.sketches.Util.LS;
 
 import com.yahoo.memory.Memory;
-import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.BinomialBoundsN;
 
 /**
@@ -96,7 +95,7 @@ public abstract class ArrayOfDoublesSketch {
   public static ArrayOfDoublesSketch wrap(final Memory mem, final long seed) {
     final SerializerDeserializer.SketchType sketchType = SerializerDeserializer.getSketchType(mem);
     if (sketchType == SerializerDeserializer.SketchType.ArrayOfDoublesQuickSelectSketch) {
-      return new DirectArrayOfDoublesQuickSelectSketchR((WritableMemory) mem, seed);
+      return new DirectArrayOfDoublesQuickSelectSketchR(mem, seed);
     }
     return new DirectArrayOfDoublesCompactSketch(mem, seed);
   }
@@ -200,6 +199,7 @@ public abstract class ArrayOfDoublesSketch {
 
   @Override
   public String toString() {
+    final int seedHash = Short.toUnsignedInt(getSeedHash());
     final StringBuilder sb = new StringBuilder();
     sb.append("### ").append(this.getClass().getSimpleName()).append(" SUMMARY: ").append(LS);
     sb.append("   Estimate                : ").append(getEstimate()).append(LS);
@@ -216,12 +216,9 @@ public abstract class ArrayOfDoublesSketch {
       sb.append("   Current Capacity        : ").append(updatable.getCurrentCapacity()).append(LS);
       sb.append("   Resize Factor           : ").append(updatable.getResizeFactor().getValue()).append(LS);
       sb.append("   Sampling Probability (p): ").append(updatable.getSamplingProbability()).append(LS);
-      sb.append("   Update Seed             : ")
-      .append(Long.toHexString(updatable.getSeed())).append(" | ")
-      .append(Long.toString(updatable.getSeed())).append(LS);
     }
     sb.append("   Seed Hash               : ")
-      .append(Integer.toHexString(Short.toUnsignedInt(getSeedHash()))).append(LS);
+      .append(Integer.toHexString(seedHash)).append(" | ").append(seedHash).append(LS);
     sb.append("### END SKETCH SUMMARY").append(LS);
     return sb.toString();
   }

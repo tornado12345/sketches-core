@@ -47,7 +47,7 @@ public final class VarOptItemsUnion<T> {
   private long outerTauDenom;
 
   /*
-   IMPORTANT NOTE: the "gadget" in the unioner object appears to be a varopt sketch,
+   IMPORTANT NOTE: the "gadget" in the union object appears to be a varopt sketch,
    but in fact is NOT because it doesn't satisfy the mathematical definition
    of a varopt sketch of the concatenated input streams. Therefore it could be different
    from a true varopt sketch with that value of K, in which case it could easily provide
@@ -63,12 +63,12 @@ public final class VarOptItemsUnion<T> {
    then constructs a varopt sketch of that size and returns it.
 
    However, the gadget itself is not touched during the resolution process,
-   and additional sketches could subsequently be merged into the unioner,
+   and additional sketches could subsequently be merged into the union,
    at which point a varopt result could again be requested.
    */
 
   /*
-   Explanation of "marked items" in the unioner's gadget:
+   Explanation of "marked items" in the union's gadget:
 
    The boolean value "true" in an pair indicates that the item
    came from an input sketch's R zone, so it is already the result of sampling.
@@ -83,7 +83,7 @@ public final class VarOptItemsUnion<T> {
    */
 
   /*
-   Note: if the computer could perform exact real-valued arithmetic, the unioner could finalize
+   Note: if the computer could perform exact real-valued arithmetic, the union could finalize
    its result by reducing k until inner_tau > outer_tau. [Due to the vagaries of floating point
    arithmetic, we won't attempt to detect and specially handle the inner_tau = outer_tau special
    case.]
@@ -316,24 +316,21 @@ public final class VarOptItemsUnion<T> {
     final byte[] outArr = new byte[outBytes];
     final WritableMemory mem = WritableMemory.wrap(outArr);
 
-    final Object memObj = mem.getArray(); // may be null
-    final long memAddr = mem.getCumulativeOffset(0L);
-
     // build preLong
-    PreambleUtil.insertPreLongs(memObj, memAddr, preLongs);                    // Byte 0
-    PreambleUtil.insertSerVer(memObj, memAddr, SER_VER);                       // Byte 1
-    PreambleUtil.insertFamilyID(memObj, memAddr, Family.VAROPT_UNION.getID()); // Byte 2
+    PreambleUtil.insertPreLongs(mem, preLongs);                    // Byte 0
+    PreambleUtil.insertSerVer(mem, SER_VER);                       // Byte 1
+    PreambleUtil.insertFamilyID(mem, Family.VAROPT_UNION.getID()); // Byte 2
     if (empty) {
-      PreambleUtil.insertFlags(memObj, memAddr, EMPTY_FLAG_MASK);
+      PreambleUtil.insertFlags(mem, EMPTY_FLAG_MASK);
     } else {
-      PreambleUtil.insertFlags(memObj, memAddr, 0);                      // Byte 3
+      PreambleUtil.insertFlags(mem, 0);                            // Byte 3
     }
-    PreambleUtil.insertMaxK(memObj, memAddr, maxK_);                           // Bytes 4-7
+    PreambleUtil.insertMaxK(mem, maxK_);                           // Bytes 4-7
 
     if (!empty) {
-      PreambleUtil.insertN(memObj, memAddr, n_);                               // Bytes 8-15
-      PreambleUtil.insertOuterTauNumerator(memObj, memAddr, outerTauNumer);    // Bytes 16-23
-      PreambleUtil.insertOuterTauDenominator(memObj, memAddr, outerTauDenom);  // Bytes 24-31
+      PreambleUtil.insertN(mem, n_);                               // Bytes 8-15
+      PreambleUtil.insertOuterTauNumerator(mem, outerTauNumer);    // Bytes 16-23
+      PreambleUtil.insertOuterTauDenominator(mem, outerTauDenom);  // Bytes 24-31
 
       final int preBytes = preLongs << 3;
       mem.putByteArray(preBytes, gadgetBytes, 0, gadgetBytes.length);
@@ -427,7 +424,7 @@ public final class VarOptItemsUnion<T> {
 
       double cumWeight = 0.0;
       final ArrayList<T> samples = reservoir.getRawSamplesAsList();
-      for (int i = 0; i < reservoirK - 1; ++i) {
+      for (int i = 0; i < (reservoirK - 1); ++i) {
         gadget_.update(samples.get(i), reservoirTau, true);
         cumWeight += reservoirTau;
       }

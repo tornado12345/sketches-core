@@ -7,7 +7,6 @@ package com.yahoo.sketches.hll;
 
 import static com.yahoo.sketches.hll.CurMode.HLL;
 import static com.yahoo.sketches.hll.HllUtil.EMPTY;
-import static com.yahoo.sketches.hll.TgtHllType.HLL_4;
 import static com.yahoo.sketches.hll.TgtHllType.HLL_8;
 import static java.lang.Math.min;
 
@@ -42,6 +41,14 @@ import com.yahoo.sketches.SketchesArgumentException;
 public class Union extends BaseHllSketch {
   final int lgMaxK;
   private final HllSketch gadget;
+
+  /**
+   * Construct this Union operator with the default maximum log-base-2 of <i>K</i>.
+   */
+  public Union() {
+    this.lgMaxK = HllSketch.DEFAULT_LG_K;
+    gadget = new HllSketch(lgMaxK, HLL_8);
+  }
 
   /**
    * Construct this Union operator with a given maximum log-base-2 of <i>K</i>.
@@ -167,7 +174,7 @@ public class Union extends BaseHllSketch {
    * @return the result of this union operator as an HLL_4 sketch.
    */
   public HllSketch getResult() {
-    return gadget.copyAs(HLL_4);
+    return gadget.copyAs(HllSketch.DEFAULT_HLL_TYPE);
   }
 
   /**
@@ -296,10 +303,10 @@ public class Union extends BaseHllSketch {
     final int lo2bits = incomingImpl.getCurMode().ordinal();
 
     final int sw = (hi2bits << 2) | lo2bits;
-    //System.out.println("SW: " + sw);
+
     switch (sw) {
       case 0: { //src: LIST, gadget: LIST
-        final PairIterator srcItr = srcImpl.getIterator(); //LIST
+        final PairIterator srcItr = srcImpl.iterator(); //LIST
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -309,7 +316,7 @@ public class Union extends BaseHllSketch {
       }
       case 1: { //src: SET, gadget: LIST
         //consider a swap here
-        final PairIterator srcItr = srcImpl.getIterator(); //SET
+        final PairIterator srcItr = srcImpl.iterator(); //SET
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -321,7 +328,7 @@ public class Union extends BaseHllSketch {
         //use lgMaxK because LIST has effective K of 2^26
         srcImpl = gadgetImpl;
         dstImpl = copyOrDownsampleHll(incomingImpl, lgMaxK);
-        final PairIterator srcItr = srcImpl.getIterator();
+        final PairIterator srcItr = srcImpl.iterator();
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -330,7 +337,7 @@ public class Union extends BaseHllSketch {
         break;
       }
       case 4: { //src: LIST, gadget: SET
-        final PairIterator srcItr = srcImpl.getIterator(); //LIST
+        final PairIterator srcItr = srcImpl.iterator(); //LIST
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -338,7 +345,7 @@ public class Union extends BaseHllSketch {
         break;
       }
       case 5: { //src: SET, gadget: SET
-        final PairIterator srcItr = srcImpl.getIterator(); //SET
+        final PairIterator srcItr = srcImpl.iterator(); //SET
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -350,7 +357,7 @@ public class Union extends BaseHllSketch {
         //use lgMaxK because LIST has effective K of 2^26
         srcImpl = gadgetImpl;
         dstImpl = copyOrDownsampleHll(incomingImpl, lgMaxK);
-        final PairIterator srcItr = srcImpl.getIterator(); //LIST
+        final PairIterator srcItr = srcImpl.iterator(); //LIST
         assert dstImpl.getCurMode() == HLL;
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
@@ -360,7 +367,7 @@ public class Union extends BaseHllSketch {
       }
       case 8: { //src: LIST, gadget: HLL
         assert dstImpl.getCurMode() == HLL;
-        final PairIterator srcItr = srcImpl.getIterator(); //LIST
+        final PairIterator srcItr = srcImpl.iterator(); //LIST
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -370,7 +377,7 @@ public class Union extends BaseHllSketch {
       }
       case 9: { //src: SET, gadget: HLL
         assert dstImpl.getCurMode() == HLL;
-        final PairIterator srcItr = srcImpl.getIterator(); //SET
+        final PairIterator srcItr = srcImpl.iterator(); //SET
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -383,7 +390,7 @@ public class Union extends BaseHllSketch {
         if ((srcLgK < dstLgK) || (dstImpl.getTgtHllType() != HLL_8)) {
           dstImpl = copyOrDownsampleHll(dstImpl, min(dstLgK, srcLgK)); //TODO Fix for off-heap
         }
-        final PairIterator srcItr = srcImpl.getIterator(); //HLL
+        final PairIterator srcItr = srcImpl.iterator(); //HLL
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -391,7 +398,7 @@ public class Union extends BaseHllSketch {
         break;
       }
       case 12: { //src: LIST, gadget: empty
-        final PairIterator srcItr = srcImpl.getIterator(); //LIST
+        final PairIterator srcItr = srcImpl.iterator(); //LIST
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -399,7 +406,7 @@ public class Union extends BaseHllSketch {
         break;
       }
       case 13: { //src: SET, gadget: empty
-        final PairIterator srcItr = srcImpl.getIterator(); //SET
+        final PairIterator srcItr = srcImpl.iterator(); //SET
         while (srcItr.nextValid()) {
           dstImpl = dstImpl.couponUpdate(srcItr.getPair()); //assignment required
         }
@@ -438,7 +445,7 @@ public class Union extends BaseHllSketch {
     }
     final int minLgK = Math.min(srcLgK, tgtLgK);
     final HllArray tgtHllArr = HllArray.newHeapHll(minLgK, TgtHllType.HLL_8);
-    final PairIterator srcItr = src.getIterator();
+    final PairIterator srcItr = src.iterator();
     while (srcItr.nextValid()) {
       tgtHllArr.couponUpdate(srcItr.getPair());
     }

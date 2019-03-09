@@ -76,11 +76,15 @@ public abstract class UpdateSketch extends Sketch {
     final int serVer = srcMem.getByte(SER_VER_BYTE) & 0XFF;
     final int familyID = srcMem.getByte(FAMILY_BYTE) & 0XFF;
     final Family family = Family.idToFamily(familyID);
-      if ((serVer == 3) && (preLongs == 3)) {
-        return DirectQuickSelectSketch.writableWrap(srcMem, seed);
-      } else {
-        throw new SketchesArgumentException(
-            "Corrupted: " + family + " family image: must have SerVer = 3 and preLongs = 3");
+    if (family != Family.QUICKSELECT) {
+      throw new SketchesArgumentException(
+        "A " + family + " sketch cannot be wrapped as an UpdateSketch.");
+    }
+    if ((serVer == 3) && (preLongs == 3)) {
+      return DirectQuickSelectSketch.writableWrap(srcMem, seed);
+    } else {
+      throw new SketchesArgumentException(
+        "Corrupted: An UpdateSketch image: must have SerVer = 3 and preLongs = 3");
     }
   }
 
@@ -109,9 +113,6 @@ public abstract class UpdateSketch extends Sketch {
   }
 
   //Sketch interface
-
-  @Override
-  public abstract boolean isEmpty();
 
   @Override
   public boolean isCompact() {
@@ -362,16 +363,16 @@ public abstract class UpdateSketch extends Sketch {
   abstract boolean isDirty();
 
   /**
-   * Gets the <a href="{@docRoot}/resources/dictionary.html#mem">Memory</a>
-   * if available, otherwise returns null.
-   * @return the backing Memory or null.
+   * Returns true if numEntries (curCount) is greater than the hashTableThreshold.
+   * @param numEntries the given number of entries (or current count).
+   * @return true if numEntries (curCount) is greater than the hashTableThreshold.
    */
-  abstract WritableMemory getMemory();
+  abstract boolean isOutOfSpace(int numEntries);
 
-  static void checkUnionQuickSelectFamily(final Object memObj, final long memAdd,
-      final int preambleLongs, final int lgNomLongs) {
+  static void checkUnionQuickSelectFamily(final Memory mem, final int preambleLongs,
+      final int lgNomLongs) {
     //Check Family
-    final int familyID = extractFamilyID(memObj, memAdd);                       //byte 2
+    final int familyID = extractFamilyID(mem);                       //byte 2
     final Family family = Family.idToFamily(familyID);
     if (family.equals(Family.UNION)) {
       if (preambleLongs != Family.UNION.getMinPreLongs()) {
@@ -397,18 +398,18 @@ public abstract class UpdateSketch extends Sketch {
     }
   }
 
-  static void checkMemIntegrity(final Memory srcMem, final Object memObj, final long memAdd,
-      final long seed, final int preambleLongs, final int lgNomLongs, final int lgArrLongs) {
+  static void checkMemIntegrity(final Memory srcMem, final long seed, final int preambleLongs,
+      final int lgNomLongs, final int lgArrLongs) {
 
     //Check SerVer
-    final int serVer = extractSerVer(memObj, memAdd);                           //byte 1
+    final int serVer = extractSerVer(srcMem);                           //byte 1
     if (serVer != SER_VER) {
       throw new SketchesArgumentException(
           "Possible corruption: Invalid Serialization Version: " + serVer);
     }
 
     //Check flags
-    final int flags = extractFlags(memObj, memAdd);                             //byte 5
+    final int flags = extractFlags(srcMem);                             //byte 5
     final int flagsMask =
         ORDERED_FLAG_MASK | COMPACT_FLAG_MASK | READ_ONLY_FLAG_MASK | BIG_ENDIAN_FLAG_MASK;
     if ((flags & flagsMask) > 0) {
@@ -417,7 +418,7 @@ public abstract class UpdateSketch extends Sketch {
     }
 
     //Check seed hashes
-    final short seedHash = (short)extractSeedHash(memObj, memAdd);              //byte 6,7
+    final short seedHash = (short)extractSeedHash(srcMem);              //byte 6,7
     Util.checkSeedHashes(seedHash, Util.computeSeedHash(seed));
 
     //Check mem capacity, lgArrLongs
@@ -429,8 +430,8 @@ public abstract class UpdateSketch extends Sketch {
               + curCapBytes + " < " + minReqBytes);
     }
     //check Theta, p
-    final float p = extractP(memObj, memAdd);                                   //bytes 12-15
-    final long thetaLong = extractThetaLong(memObj, memAdd);                    //bytes 16-23
+    final float p = extractP(srcMem);                                   //bytes 12-15
+    final long thetaLong = extractThetaLong(srcMem);                    //bytes 16-23
     final double theta = thetaLong / MAX_THETA_LONG_AS_DOUBLE;
     if ((lgArrLongs <= lgNomLongs) && (theta < p) ) {
       throw new SketchesArgumentException(

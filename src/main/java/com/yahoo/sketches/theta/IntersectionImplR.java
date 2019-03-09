@@ -5,7 +5,6 @@
 
 package com.yahoo.sketches.theta;
 
-import static com.yahoo.sketches.Family.objectToFamily;
 import static com.yahoo.sketches.Util.MIN_LG_ARR_LONGS;
 import static com.yahoo.sketches.Util.floorPowerOf2;
 import static com.yahoo.sketches.theta.CompactSketch.compactCachePart;
@@ -78,6 +77,7 @@ class IntersectionImplR extends Intersection {
    * @param srcMem The source Memory image.
    * <a href="{@docRoot}/resources/dictionary.html#mem">See Memory</a>
    * @param seed <a href="{@docRoot}/resources/dictionary.html#seed">See seed</a>
+   * @return an IntersectionImplR that wraps a read-only Intersection image referenced by srcMem
    */
   static IntersectionImplR wrapInstance(final Memory srcMem, final long seed) {
     final IntersectionImplR impl = new IntersectionImplR((WritableMemory) srcMem, seed, false);
@@ -181,8 +181,8 @@ class IntersectionImplR extends Intersection {
   }
 
   @Override
-  public boolean isSameResource(final Memory mem) {
-    return (mem_ != null) ? mem_.isSameResource(mem) : false;
+  public boolean isSameResource(final Memory that) {
+    return (mem_ != null) ? mem_.isSameResource(that) : false;
   }
 
   @Override
@@ -192,12 +192,10 @@ class IntersectionImplR extends Intersection {
     empty_ = false;
     hashTable_ = null;
     if (mem_ != null) {
-      final Object memObj = mem_.getArray(); //may be null
-      final long memAdd = mem_.getCumulativeOffset(0);
-      insertLgArrLongs(memObj, memAdd, lgArrLongs_); //make sure
-      insertCurCount(memObj, memAdd, -1);
-      insertThetaLong(memObj, memAdd, Long.MAX_VALUE);
-      clearEmpty(memObj, memAdd);
+      insertLgArrLongs(mem_, lgArrLongs_); //make sure
+      insertCurCount(mem_, -1);
+      insertThetaLong(mem_, Long.MAX_VALUE);
+      clearEmpty(mem_);
     }
   }
 
@@ -215,7 +213,7 @@ class IntersectionImplR extends Intersection {
       //preamble
       memOut.putByte(PREAMBLE_LONGS_BYTE, (byte) CONST_PREAMBLE_LONGS); //RF not used = 0
       memOut.putByte(SER_VER_BYTE, (byte) SER_VER);
-      memOut.putByte(FAMILY_BYTE, (byte) objectToFamily(this).getID());
+      memOut.putByte(FAMILY_BYTE, (byte) Family.INTERSECTION.getID());
       memOut.putByte(LG_NOM_LONGS_BYTE, (byte) 0); //not used
       memOut.putByte(LG_ARR_LONGS_BYTE, (byte) lgArrLongs_);
       if (empty_) {

@@ -77,6 +77,7 @@ final class DoublesUpdateImpl {
    * @param size2KBuf size 2k scratch buffer
    * @param doUpdateVersion true if update version
    * @param k the target value of k
+   * @param tgtSketchBuf the given DoublesSketchAccessor
    * @param bitPattern the current bitPattern, prior to this call
    * @return The updated bit pattern.  The updated combined buffer is output as a side effect.
    */
@@ -87,14 +88,14 @@ final class DoublesUpdateImpl {
           final boolean doUpdateVersion,
           final int k,
           final DoublesSketchAccessor tgtSketchBuf,
-          final long bitPattern
-  ) {
+          final long bitPattern) {
     final int endingLevel = Util.lowestZeroBitStartingAt(bitPattern, startingLevel);
     tgtSketchBuf.setLevel(endingLevel);
     if (doUpdateVersion) { // update version of computation
       // its is okay for optSrcKBuf to be null in this case
       zipSize2KBuffer(size2KBuf, tgtSketchBuf);
     } else { // mergeInto version of computation
+      assert (optSrcKBuf != null);
       tgtSketchBuf.putArray(optSrcKBuf.getArray(0, k), 0, 0, k);
     }
 

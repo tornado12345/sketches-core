@@ -4,16 +4,22 @@
  */
 package com.yahoo.sketches.theta;
 
+import static com.yahoo.sketches.Util.DEFAULT_UPDATE_SEED;
+import static com.yahoo.sketches.theta.PreambleUtil.PREAMBLE_LONGS_BYTE;
+import static com.yahoo.sketches.theta.PreambleUtil.SER_VER_BYTE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.fail;
 
 import org.testng.annotations.Test;
 
+import com.yahoo.memory.DefaultMemoryRequestServer;
+import com.yahoo.memory.MemoryRequestServer;
+import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.Family;
 import com.yahoo.sketches.ResizeFactor;
 import com.yahoo.sketches.SketchesArgumentException;
 import com.yahoo.sketches.Util;
-
 /**
  * @author Lee Rhodes
  */
@@ -87,24 +93,28 @@ public class UpdateSketchTest {
 
     long seed = 12345L;
     bldr.setSeed(seed);
-    assertEquals(seed, bldr.getSeed());
+    assertEquals(bldr.getSeed(), seed);
 
     float p = (float)0.5;
     bldr.setP(p);
-    assertEquals(p, bldr.getP());
+    assertEquals(bldr.getP(), p);
 
     ResizeFactor rf = ResizeFactor.X4;
     bldr.setResizeFactor(rf);
-    assertEquals(rf, bldr.getResizeFactor());
+    assertEquals(bldr.getResizeFactor(), rf);
 
     Family fam = Family.ALPHA;
     bldr.setFamily(fam);
-    assertEquals(fam, bldr.getFamily());
+    assertEquals(bldr.getFamily(), fam);
 
     int lgK = 10;
     int k = 1 << lgK;
     bldr.setNominalEntries(k);
-    assertEquals(lgK, bldr.getLgNominalEntries());
+    assertEquals(bldr.getLgNominalEntries(), lgK);
+
+    MemoryRequestServer mrs = new DefaultMemoryRequestServer();
+    bldr.setMemoryRequestServer(mrs);
+    assertEquals(bldr.getMemoryRequestServer(), mrs);
 
     println(bldr.toString());
   }
@@ -121,6 +131,32 @@ public class UpdateSketchTest {
     UpdateSketch sk = Sketches.updateSketchBuilder().build();
     CompactSketch csk = sk.compact();
     assertEquals(csk.getCurrentBytes(true), 8);
+  }
+
+  @Test(expectedExceptions = SketchesArgumentException.class)
+  public void checkIncompatibleFamily() {
+    UpdateSketch sk = Sketches.updateSketchBuilder().build();
+    sk.update(1);
+    WritableMemory wmem = WritableMemory.wrap(sk.compact().toByteArray());
+    UpdateSketch.wrap(wmem, DEFAULT_UPDATE_SEED);
+  }
+
+  @Test
+  public void checkCorruption() {
+    UpdateSketch sk = Sketches.updateSketchBuilder().build();
+    sk.update(1);
+    WritableMemory wmem = WritableMemory.wrap(sk.toByteArray());
+    try {
+      wmem.putByte(SER_VER_BYTE, (byte) 2);
+      UpdateSketch.wrap(wmem, DEFAULT_UPDATE_SEED);
+      fail();
+    } catch (SketchesArgumentException e) { }
+    try {
+      wmem.putByte(SER_VER_BYTE, (byte) 3);
+      wmem.putByte(PREAMBLE_LONGS_BYTE, (byte) 2);
+      UpdateSketch.wrap(wmem, DEFAULT_UPDATE_SEED);
+      fail();
+    } catch (SketchesArgumentException e) { }
   }
 
   @Test

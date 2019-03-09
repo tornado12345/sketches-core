@@ -22,6 +22,7 @@ import static com.yahoo.sketches.theta.PreambleUtil.UNION_THETA_LONG;
 import static java.lang.Math.min;
 
 import com.yahoo.memory.Memory;
+import com.yahoo.memory.MemoryRequestServer;
 import com.yahoo.memory.WritableMemory;
 import com.yahoo.sketches.Family;
 import com.yahoo.sketches.HashOperations;
@@ -57,7 +58,7 @@ final class UnionImpl extends Union {
    */
   static UnionImpl initNewHeapInstance(final int lgNomLongs, final long seed, final float p,
       final ResizeFactor rf) {
-    final UpdateSketch gadget = HeapQuickSelectSketch.initNewHeapInstance(
+    final UpdateSketch gadget = new HeapQuickSelectSketch(
         lgNomLongs, seed, p, rf, true); //create with UNION family
     final UnionImpl unionImpl = new UnionImpl(gadget, seed);
     unionImpl.unionThetaLong_ = gadget.getThetaLong();
@@ -72,13 +73,19 @@ final class UnionImpl extends Union {
    * @param seed <a href="{@docRoot}/resources/dictionary.html#seed">See seed</a>
    * @param p <a href="{@docRoot}/resources/dictionary.html#p">See Sampling Probability, <i>p</i></a>
    * @param rf <a href="{@docRoot}/resources/dictionary.html#resizeFactor">See Resize Factor</a>
+   * @param memReqSvr a given instance of a MemoryRequestServer
    * @param dstMem the given Memory object destination. It will be cleared prior to use.
    * @return this class
    */
-  static UnionImpl initNewDirectInstance(final int lgNomLongs, final long seed, final float p,
-          final ResizeFactor rf, final WritableMemory dstMem) {
-    final UpdateSketch gadget = DirectQuickSelectSketch.initNewDirectInstance(
-        lgNomLongs, seed, p, rf, dstMem, true); //create with UNION family
+  static UnionImpl initNewDirectInstance(
+      final int lgNomLongs,
+      final long seed,
+      final float p,
+      final ResizeFactor rf,
+      final MemoryRequestServer memReqSvr,
+      final WritableMemory dstMem) {
+    final UpdateSketch gadget = new DirectQuickSelectSketch(
+        lgNomLongs, seed, p, rf, memReqSvr, dstMem, true); //create with UNION family
     final UnionImpl unionImpl = new UnionImpl(gadget, seed);
     unionImpl.unionThetaLong_ = gadget.getThetaLong();
     dstMem.putLong(UNION_THETA_LONG, gadget.getThetaLong());
@@ -214,8 +221,9 @@ final class UnionImpl extends Union {
   }
 
   @Override
-  public boolean isSameResource(final Memory mem) {
-    return gadget_.isDirect() ? gadget_.getMemory().isSameResource(mem) : false;
+  public boolean isSameResource(final Memory that) {
+    return (gadget_ instanceof DirectQuickSelectSketchR)
+        ? gadget_.getMemory().isSameResource(that) : false;
   }
 
   @Override
@@ -227,14 +235,16 @@ final class UnionImpl extends Union {
       return;
     }
     Util.checkSeedHashes(seedHash_, sketchIn.getSeedHash());
+    Sketch.checkSketchAndMemoryFlags(sketchIn);
+
 
     final long thetaLongIn = sketchIn.getThetaLong();
     unionThetaLong_ = min(unionThetaLong_, thetaLongIn); //Theta rule with incoming
     final int curCountIn = sketchIn.getRetainedEntries(true);
 
     if (sketchIn.isOrdered()) { //Only true if Compact. Use early stop
-
-      if (sketchIn.isDirect()) { //ordered, direct thus compact
+      //Ordered, thus compact
+      if (sketchIn.isDirect()) {
         final Memory skMem = ((CompactSketch) sketchIn).getMemory();
         final int preambleLongs = skMem.getByte(PREAMBLE_LONGS_BYTE) & 0X3F;
         for (int i = 0; i < curCountIn; i++ ) {
@@ -244,7 +254,7 @@ final class UnionImpl extends Union {
           gadget_.hashUpdate(hashIn); //backdoor update, hash function is bypassed
         }
       }
-      else { //sketchIn is on the Java Heap, ordered, thus compact
+      else { //sketchIn is on the Java Heap or has array
         final long[] cacheIn = sketchIn.getCache(); //not a copy!
         for (int i = 0; i < curCountIn; i++ ) {
           final long hashIn = cacheIn[i];
@@ -265,7 +275,7 @@ final class UnionImpl extends Union {
     }
     unionThetaLong_ = min(unionThetaLong_, gadget_.getThetaLong()); //Theta rule with gadget
     if (gadget_.isDirect()) {
-      gadget_.getMemory().putLong(UNION_THETA_LONG, unionThetaLong_);
+      ((WritableMemory)gadget_.getMemory()).putLong(UNION_THETA_LONG, unionThetaLong_);
     }
   }
 
@@ -382,7 +392,7 @@ final class UnionImpl extends Union {
     }
     unionThetaLong_ = min(unionThetaLong_, gadget_.getThetaLong());
     if (gadget_.isDirect()) {
-      gadget_.getMemory().putLong(UNION_THETA_LONG, unionThetaLong_);
+      ((WritableMemory)gadget_.getMemory()).putLong(UNION_THETA_LONG, unionThetaLong_);
     }
   }
 
@@ -411,7 +421,7 @@ final class UnionImpl extends Union {
     }
     unionThetaLong_ = min(unionThetaLong_, gadget_.getThetaLong());
     if (gadget_.isDirect()) {
-      gadget_.getMemory().putLong(UNION_THETA_LONG, unionThetaLong_);
+      ((WritableMemory)gadget_.getMemory()).putLong(UNION_THETA_LONG, unionThetaLong_);
     }
   }
 
@@ -463,7 +473,7 @@ final class UnionImpl extends Union {
     }
     unionThetaLong_ = min(unionThetaLong_, gadget_.getThetaLong()); //sync thetaLongs
     if (gadget_.isDirect()) {
-      gadget_.getMemory().putLong(UNION_THETA_LONG, unionThetaLong_);
+      ((WritableMemory)gadget_.getMemory()).putLong(UNION_THETA_LONG, unionThetaLong_);
     }
   }
 

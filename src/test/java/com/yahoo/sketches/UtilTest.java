@@ -8,12 +8,14 @@ import static com.yahoo.sketches.Util.bytesToInt;
 import static com.yahoo.sketches.Util.bytesToLong;
 import static com.yahoo.sketches.Util.bytesToString;
 import static com.yahoo.sketches.Util.ceilingPowerOf2;
+import static com.yahoo.sketches.Util.ceilingPowerOfBdouble;
 import static com.yahoo.sketches.Util.characterPad;
 import static com.yahoo.sketches.Util.checkIfMultipleOf8AndGT0;
 import static com.yahoo.sketches.Util.checkIfPowerOf2;
 import static com.yahoo.sketches.Util.checkProbability;
 import static com.yahoo.sketches.Util.evenlyLgSpaced;
 import static com.yahoo.sketches.Util.floorPowerOf2;
+import static com.yahoo.sketches.Util.floorPowerOfBdouble;
 import static com.yahoo.sketches.Util.intToBytes;
 import static com.yahoo.sketches.Util.isLessThanUnsigned;
 import static com.yahoo.sketches.Util.isMultipleOf8AndGT0;
@@ -22,7 +24,11 @@ import static com.yahoo.sketches.Util.milliSecToString;
 import static com.yahoo.sketches.Util.nanoSecToString;
 import static com.yahoo.sketches.Util.pwr2LawNext;
 import static com.yahoo.sketches.Util.pwr2LawPrev;
+import static com.yahoo.sketches.Util.pwrLawNextDouble;
+import static com.yahoo.sketches.Util.simpleIntLog2;
 import static com.yahoo.sketches.Util.zeroPad;
+import static java.lang.Math.pow;
+import static org.testng.Assert.fail;
 
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -73,6 +79,16 @@ public class UtilTest {
   }
 
   @Test
+  public void checkCeilingPowerOf2double() {
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, Integer.MAX_VALUE), pow(2.0, 31));
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, 1 << 30), pow(2.0, 30));
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, 64.0), 64.0);
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, 65.0), 128.0);
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, 0.0), 1.0);
+    Assert.assertEquals(ceilingPowerOfBdouble(2.0, -1.0), 1.0);
+  }
+
+  @Test
   public void checkFloorPowerOf2() {
     Assert.assertEquals(floorPowerOf2( -1), 1);
     Assert.assertEquals(floorPowerOf2(0), 1);
@@ -84,6 +100,20 @@ public class UtilTest {
     Assert.assertEquals(floorPowerOf2((1 << 30) - 1), (1 << 29));
     Assert.assertEquals(floorPowerOf2((1 << 30)), (1 << 30));
     Assert.assertEquals(floorPowerOf2((1 << 30) + 1), (1 << 30));
+  }
+
+  @Test
+  public void checkFloorPowerOf2double() {
+    Assert.assertEquals(floorPowerOfBdouble(2.0, -1.0), 1.0);
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 0.0), 1.0);
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 1.0), 1.0);
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 2.0), 2.0);
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 3.0), 2.0);
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 4.0), 4.0);
+
+    Assert.assertEquals(floorPowerOfBdouble(2.0, (1 << 30) - 1), (double)(1 << 29));
+    Assert.assertEquals(floorPowerOfBdouble(2.0, 1 << 30), (double)(1 << 30));
+    Assert.assertEquals(floorPowerOfBdouble(2.0, (1 << 30) + 1.0), (double)(1L << 30));
   }
 
   @Test(expectedExceptions = SketchesArgumentException.class)
@@ -213,7 +243,7 @@ public class UtilTest {
   public void checkNsecToString() {
     long nS = 1000000000L + 1000000L + 1000L + 1L;
     String result = nanoSecToString(nS);
-    String expected = "1.001 001 001";
+    String expected = "1.001_001_001";
     Assert.assertEquals(result, expected);
   }
 
@@ -232,6 +262,21 @@ public class UtilTest {
   }
 
   @Test
+  public void checkPwr2LawNextDouble() {
+    double next = pwrLawNextDouble(2, 1.0, true, 2.0);
+    Assert.assertEquals(next, 2.0, 0.0);
+    next = pwrLawNextDouble(2, 1.0, false, 2.0);
+    Assert.assertEquals(next, Math.sqrt(2), 0.0);
+    next = pwrLawNextDouble(2, 0.5, true, 2.0);
+    Assert.assertEquals(next, 2.0, 0.0);
+    next = pwrLawNextDouble(2, 0.5, false, 2.0);
+    Assert.assertEquals(next, Math.sqrt(2), 0.0);
+    next = pwrLawNextDouble(2, next, false, 2.0);
+    Assert.assertEquals(next, 2.0, 0.0);
+
+  }
+
+  @Test
   public void checkPwr2LawExamples() {
     int maxP = 1024;
     int minP = 1;
@@ -246,6 +291,16 @@ public class UtilTest {
       print(p + " ");
     }
     println("");
+  }
+
+  @Test
+  public void checkSimpleIntLog2() {
+    Assert.assertEquals(simpleIntLog2(2), 1);
+    Assert.assertEquals(simpleIntLog2(1), 0);
+    try {
+      simpleIntLog2(0);
+      fail();
+    } catch (SketchesArgumentException e) {}
   }
 
   @Test

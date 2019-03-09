@@ -52,7 +52,8 @@ final class Util {
 
   /**
    * Computes the raw delta area between two quantile sketches for the
-   * {@link #komologorovSmirnovTest(DoubleSketch, DoubleSketch, double) komologorovSmirnovTest}
+   * {@link #kolmogorovSmirnovTest(DoubleSketch, DoubleSketch, double)
+   * Kolmogorov-Smirnov Test}
    * method.
    * @param sketch1 Input DoubleSketch 1
    * @param sketch2 Input DoubleSketch 2
@@ -94,7 +95,7 @@ final class Util {
       if (pSample == qSample) {
         i = getNextIndex(pSamplesArr, i);
         j = getNextIndex(qSamplesArr, j);
-      } else if ((pSample < qSample) && (i < pSamplesArrLen)) {
+      } else if (pSample < qSample) {
         i = getNextIndex(pSamplesArr, i);
       } else {
         j = getNextIndex(qSamplesArr, j);
@@ -108,10 +109,10 @@ final class Util {
 
   /**
    * Computes the adjusted delta area threshold for the
-   * {@link #komologorovSmirnovTest(DoubleSketch, DoubleSketch, double) komologorovSmirnovTest}
+   * {@link #kolmogorovSmirnovTest(DoubleSketch, DoubleSketch, double) Kolmogorov-Smirnov Test}
    * method.
    * This adjusts the computed threshold by the error epsilons of the two given sketches.
-   * See <a href="https://en.wikipedia.org/wiki/Kolmogorov–Smirnov_test">Kolmogorov–Smirnov Test</a>
+   * See <a href="https://en.wikipedia.org/wiki/Kolmogorov-Smirnov_test">Kolmogorov–Smirnov Test</a>
    * @param sketch1 Input DoubleSketch 1
    * @param sketch2 Input DoubleSketch 2
    * @param tgtPvalue Target p-value. Typically .001 to .1, e.g., .05.
@@ -142,7 +143,7 @@ final class Util {
    * @return Boolean indicating whether we can reject the null hypothesis (that the sketches
    * reflect the same underlying distribution) using the provided tgtPValue.
    */
-  public static boolean komologorovSmirnovTest(final DoublesSketch sketch1,
+  public static boolean kolmogorovSmirnovTest(final DoublesSketch sketch1,
       final DoublesSketch sketch2, final double tgtPvalue) {
     final double delta = computeKSDelta(sketch1, sketch2);
     final double thresh = computeKSThreshold(sketch1, sketch2, tgtPvalue);
@@ -284,31 +285,11 @@ final class Util {
   }
 
   /**
-   * Checks the sequential validity of the given array of fractions.
-   * They must be unique, monotonically increasing and not NaN, not &lt; 0 and not &gt; 1.0.
-   * @param fractions array
-   */
-  static final void validateFractions(final double[] fractions) {
-    if (fractions == null) {
-      throw new SketchesArgumentException("Fractions cannot be null.");
-    }
-    final int len = fractions.length;
-    if (len == 0) { return; }
-    final double flo = fractions[0];
-    final double fhi = fractions[fractions.length - 1];
-    if ((flo < 0.0) || (fhi > 1.0)) {
-      throw new SketchesArgumentException(
-          "A fraction cannot be less than zero or greater than 1.0");
-    }
-    Util.validateValues(fractions);
-  }
-
-  /**
    * Checks the sequential validity of the given array of double values.
    * They must be unique, monotonically increasing and not NaN.
    * @param values the given array of double values
    */
-  static final void validateValues(final double[] values) {
+  static final void checkSplitPointsOrder(final double[] values) {
     if (values == null) {
       throw new SketchesArgumentException("Values cannot be null.");
     }
@@ -317,6 +298,17 @@ final class Util {
       if (values[j] < values[j + 1]) { continue; }
       throw new SketchesArgumentException(
           "Values must be unique, monotonically increasing and not NaN.");
+    }
+  }
+
+  /**
+   * Checks that the given fractional rank: <i>0 &le; frank &le; 1.0</i>.
+   * @param frank the given fractional rank.
+   */
+  static final void checkFractionalRankBounds(final double frank) {
+    if ((frank < 0.0) || (frank > 1.0)) {
+      throw new SketchesArgumentException(
+        "Fractional rank must be >= 0 and <= 1.0: " + frank);
     }
   }
 

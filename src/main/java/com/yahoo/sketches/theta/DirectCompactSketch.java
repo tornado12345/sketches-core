@@ -11,7 +11,6 @@ import static com.yahoo.sketches.theta.PreambleUtil.extractSeedHash;
 import static com.yahoo.sketches.theta.PreambleUtil.extractThetaLong;
 
 import com.yahoo.memory.Memory;
-import com.yahoo.memory.WritableMemory;
 
 /**
  * Parent class of the Direct Compact Sketches.
@@ -20,13 +19,9 @@ import com.yahoo.memory.WritableMemory;
  */
 abstract class DirectCompactSketch extends CompactSketch {
   final Memory mem_;
-  final Object memObj_;
-  final long memAdd_;
 
   DirectCompactSketch(final Memory mem) {
     mem_ = mem;
-    memObj_ = ((WritableMemory)mem).getArray();
-    memAdd_ = mem.getCumulativeOffset(0L);
   }
 
   //Sketch
@@ -34,40 +29,56 @@ abstract class DirectCompactSketch extends CompactSketch {
   @Override
   public int getCurrentBytes(final boolean compact) { //compact is ignored here
     final int preLongs = getCurrentPreambleLongs(true);
-    final boolean empty = PreambleUtil.isEmpty(memObj_, memAdd_);
+    final boolean empty = PreambleUtil.isEmpty(mem_);
     if (preLongs == 1) {
       return (empty) ? 8 : 16; //empty or singleItem
     }
     //preLongs > 1
-    final int curCount = extractCurCount(memObj_, memAdd_);
+    final int curCount = extractCurCount(mem_);
     return (preLongs + curCount) << 3;
+  }
+
+  @Override
+  public HashIterator iterator() {
+    return new MemoryHashIterator(mem_, getRetainedEntries(), getThetaLong());
   }
 
   @Override
   public int getRetainedEntries(final boolean valid) { //compact is always valid
     final int preLongs = getCurrentPreambleLongs(true);
-    final boolean empty = PreambleUtil.isEmpty(memObj_, memAdd_);
+    final boolean empty = PreambleUtil.isEmpty(mem_);
     if (preLongs == 1) {
       return (empty) ? 0 : 1;
     }
     //preLongs > 1
-    final int curCount = extractCurCount(memObj_, memAdd_);
+    final int curCount = extractCurCount(mem_);
     return curCount;
   }
 
   @Override
-  public boolean isDirect() {
+  public long getThetaLong() {
+    final int preLongs = extractPreLongs(mem_);
+    return (preLongs > 2) ? extractThetaLong(mem_) : Long.MAX_VALUE;
+  }
+
+  @Override
+  public boolean hasMemory() {
     return true;
   }
 
   @Override
-  public boolean isEmpty() {
-    return PreambleUtil.isEmpty(memObj_, memAdd_);
+  public boolean isDirect() {
+    return mem_.isDirect();
   }
 
   @Override
-  public boolean isSameResource(final Memory mem) {
-    return mem_.isSameResource(mem);
+  public boolean isEmpty() {
+    return PreambleUtil.isEmpty(mem_);
+  }
+
+  @Override
+  public boolean isSameResource(final Memory that) {
+    return mem_.isSameResource(that);
   }
 
   @Override
@@ -92,7 +103,7 @@ abstract class DirectCompactSketch extends CompactSketch {
 
   @Override
   int getCurrentPreambleLongs(final boolean compact) { //already compact; ignore
-    return extractPreLongs(memObj_, memAdd_);
+    return extractPreLongs(mem_);
   }
 
   @Override
@@ -102,13 +113,7 @@ abstract class DirectCompactSketch extends CompactSketch {
 
   @Override
   short getSeedHash() {
-    return (short) extractSeedHash(memObj_, memAdd_);
-  }
-
-  @Override
-  long getThetaLong() {
-    final int preLongs = extractPreLongs(memObj_, memAdd_);
-    return (preLongs > 2) ? extractThetaLong(memObj_, memAdd_) : Long.MAX_VALUE;
+    return (short) extractSeedHash(mem_);
   }
 
   /**

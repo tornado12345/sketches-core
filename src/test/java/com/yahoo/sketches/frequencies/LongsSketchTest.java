@@ -108,7 +108,7 @@ public class LongsSketchTest {
     byte[] bytearray0 = sketch.toByteArray();
     WritableMemory mem0 = WritableMemory.wrap(bytearray0);
     LongsSketch new_sketch0 = LongsSketch.getInstance(mem0);
-    String str0 = PreambleUtil.preambleToString(mem0);
+    String str0 = LongsSketch.toString(mem0);
     println(str0);
     String string0 = sketch.serializeToString();
     String new_string0 = new_sketch0.serializeToString();
@@ -124,7 +124,7 @@ public class LongsSketchTest {
     byte[] bytearray1 = sketch.toByteArray();
     Memory mem1 = Memory.wrap(bytearray1);
     LongsSketch new_sketch1 = LongsSketch.getInstance(mem1);
-    String str1 = PreambleUtil.preambleToString(mem1);
+    String str1 = LongsSketch.toString(bytearray1);
     println(str1);
     String string1 = sketch.serializeToString();
     String new_string1 = new_sketch1.serializeToString();
@@ -389,6 +389,7 @@ public class LongsSketchTest {
     fls.update(1, -1);
   }
 
+  @SuppressWarnings("unlikely-arg-type")
   @Test
   public void checkGetFrequentItems1() {
     int minSize = 1 << LG_MIN_MAP_SIZE;
@@ -396,6 +397,9 @@ public class LongsSketchTest {
     fis.update(1);
     Row[] rowArr = fis.getFrequentItems(ErrorType.NO_FALSE_POSITIVES);
     Row row = rowArr[0];
+    assertTrue(row.hashCode() != 0);
+    assertTrue(row.equals(row));
+    assertFalse(row.equals(fis));
     assertNotNull(row);
     assertEquals(row.est, 1L);
     assertEquals(row.item, 1L);
@@ -496,6 +500,48 @@ public class LongsSketchTest {
     int size = 1 << LG_MIN_MAP_SIZE;
     printSketch(size, new long[] {1, 1, 1, 1, 1, 1, 1, 2, 3, 4, 5});
     printSketch(size, new long[] {5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1});
+  }
+
+  @Test
+  public void checkStringDeserEmptyNotCorrupt() {
+    int size = 1 << LG_MIN_MAP_SIZE;
+    int thresh = (size * 3) / 4;
+    String fmt = "%6d%10s%s";
+    LongsSketch fls = new LongsSketch(size);
+    println("Sketch Size: " + size);
+    String s = null;
+    int i = 0;
+    for ( ; i <= thresh; i++) {
+      fls.update(i+1, 1);
+      s = fls.serializeToString();
+      println(String.format("SER   " + fmt, (i + 1), fls.isEmpty() + " : ", s ));
+      LongsSketch fls2 = LongsSketch.getInstance(s);
+      println(String.format("DESER " + fmt, (i + 1), fls2.isEmpty() + " : ", s ));
+    }
+  }
+
+  @Test(expectedExceptions = SketchesArgumentException.class)
+  public void checkStringDeserEmptyCorrupt() {
+    String s = "1,"  //serVer
+             + "10," //FamID
+             + "3,"  //lgMaxMapSz
+             + "0,"  //Empty Flag = false ... corrupted, should be true
+             + "7,"  //stream Len so far
+             + "1,"  //error offset
+             + "0,"  //numActive ...conflict with empty
+             + "8,"; //curMapLen
+    LongsSketch.getInstance(s);
+  }
+
+  @Test
+  public void checkGetEpsilon() {
+    assertEquals(LongsSketch.getEpsilon(1024), 3.5 / 1024, 0.0);
+  }
+
+  @Test
+  public void checkGetAprioriError() {
+    double eps = 3.5 / 1024;
+    assertEquals(LongsSketch.getAprioriError(1024, 10_000), eps * 10_000);
   }
 
   @Test

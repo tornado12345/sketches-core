@@ -49,16 +49,26 @@ import com.yahoo.sketches.SketchesArgumentException;
  * @author Kevin Lang
  */
 public class HllSketch extends BaseHllSketch {
+  public static final int DEFAULT_LG_K = 12;
+  public static final TgtHllType DEFAULT_HLL_TYPE = TgtHllType.HLL_4;
+
   private static final String LS = System.getProperty("line.separator");
   HllSketchImpl hllSketchImpl = null;
 
   /**
-   * Constructs a new on-heap sketch with a HLL_4 sketch as the default.
+   * Constructs a new on-heap sketch with the default lgConfigK and tgtHllType.
+   */
+  public HllSketch() {
+    this(DEFAULT_LG_K, DEFAULT_HLL_TYPE);
+  }
+
+  /**
+   * Constructs a new on-heap sketch with the default tgtHllType.
    * @param lgConfigK The Log2 of K for the target HLL sketch. This value must be
    * between 4 and 21 inclusively.
    */
   public HllSketch(final int lgConfigK) {
-    this(lgConfigK, TgtHllType.HLL_4);
+    this(lgConfigK, DEFAULT_HLL_TYPE);
   }
 
   /**
@@ -124,12 +134,10 @@ public class HllSketch extends BaseHllSketch {
    * @return an HllSketch on the java heap.
    */
   public static final HllSketch heapify(final Memory srcMem) {
-    final Object memObj = ((WritableMemory) srcMem).getArray();
-    final long memAdd = srcMem.getCumulativeOffset(0);
     final CurMode curMode = checkPreamble(srcMem);
     final HllSketch heapSketch;
     if (curMode == CurMode.HLL) {
-      final TgtHllType tgtHllType = extractTgtHllType(memObj, memAdd);
+      final TgtHllType tgtHllType = extractTgtHllType(srcMem);
       if (tgtHllType == TgtHllType.HLL_4) {
         heapSketch = new HllSketch(Hll4Array.heapify(srcMem));
       } else if (tgtHllType == TgtHllType.HLL_6) {
@@ -157,15 +165,13 @@ public class HllSketch extends BaseHllSketch {
    * @return an HllSketch where the sketch data is in the given dstMem.
    */
   public static final HllSketch writableWrap(final WritableMemory wmem) {
-    final Object memObj = wmem.getArray();
-    final long memAdd = wmem.getCumulativeOffset(0);
-    final boolean compact = extractCompactFlag(memObj, memAdd);
+    final boolean compact = extractCompactFlag(wmem);
     if (compact) {
       throw new SketchesArgumentException(
           "Cannot perform a writableWrap of a writable sketch image that is in compact form.");
     }
-    final int lgConfigK = extractLgK(memObj, memAdd);
-    final TgtHllType tgtHllType = extractTgtHllType(memObj, memAdd);
+    final int lgConfigK = extractLgK(wmem);
+    final TgtHllType tgtHllType = extractTgtHllType(wmem);
     final long minBytes = getMaxUpdatableSerializationBytes(lgConfigK, tgtHllType);
     final long capBytes = wmem.getCapacity();
     HllUtil.checkMemSize(minBytes, capBytes);
@@ -199,10 +205,8 @@ public class HllSketch extends BaseHllSketch {
    *
    */
   public static final HllSketch wrap(final Memory srcMem) {
-    final Object memObj = ((WritableMemory) srcMem).getArray();
-    final long memAdd = srcMem.getCumulativeOffset(0);
-    final int lgConfigK = extractLgK(memObj, memAdd);
-    final TgtHllType tgtHllType = extractTgtHllType(memObj, memAdd);
+    final int lgConfigK = extractLgK(srcMem);
+    final TgtHllType tgtHllType = extractTgtHllType(srcMem);
 
     final CurMode curMode = checkPreamble(srcMem);
     final HllSketch directSketch;
@@ -244,11 +248,6 @@ public class HllSketch extends BaseHllSketch {
   @Override
   public double getCompositeEstimate() {
     return hllSketchImpl.getCompositeEstimate();
-  }
-
-  @Override
-  CurMode getCurMode() {
-    return hllSketchImpl.getCurMode();
   }
 
   @Override
@@ -365,12 +364,12 @@ public class HllSketch extends BaseHllSketch {
       sb.append("### HLL SKETCH SUMMARY: ").append(LS);
       sb.append("  Log Config K   : ").append(getLgConfigK()).append(LS);
       sb.append("  Hll Target     : ").append(getTgtHllType()).append(LS);
-      sb.append("  Current Mode   : ").append(getCurrentMode()).append(LS);
+      sb.append("  Current Mode   : ").append(getCurMode()).append(LS);
       sb.append("  LB             : ").append(getLowerBound(1)).append(LS);
       sb.append("  Estimate       : ").append(getEstimate()).append(LS);
       sb.append("  UB             : ").append(getUpperBound(1)).append(LS);
       sb.append("  OutOfOrder Flag: ").append(isOutOfOrderFlag()).append(LS);
-      if (getCurrentMode() == CurMode.HLL) {
+      if (getCurMode() == CurMode.HLL) {
         final AbstractHllArray absHll = (AbstractHllArray) hllSketchImpl;
         sb.append("  CurMin         : ").append(absHll.getCurMin()).append(LS);
         sb.append("  NumAtCurMin    : ").append(absHll.getNumAtCurMin()).append(LS);
@@ -384,7 +383,7 @@ public class HllSketch extends BaseHllSketch {
     }
     if (detail) {
       sb.append("### HLL SKETCH DATA DETAIL: ").append(LS);
-      final PairIterator pitr = getIterator();
+      final PairIterator pitr = iterator();
       sb.append(pitr.getHeader()).append(LS);
       if (all) {
         while (pitr.nextAll()) {
@@ -397,7 +396,7 @@ public class HllSketch extends BaseHllSketch {
       }
     }
     if (auxDetail) {
-      if ((getCurrentMode() == CurMode.HLL) && (getTgtHllType() == TgtHllType.HLL_4)) {
+      if ((getCurMode() == CurMode.HLL) && (getTgtHllType() == TgtHllType.HLL_4)) {
         final AbstractHllArray absHll = (AbstractHllArray) hllSketchImpl;
         final PairIterator auxItr = absHll.getAuxIterator();
         if (auxItr != null) {
@@ -418,17 +417,36 @@ public class HllSketch extends BaseHllSketch {
     return sb.toString();
   }
 
+  /**
+   * Returns a human readable string of the preamble of a byte array image of an HllSketch.
+   * @param byteArr the given byte array
+   * @return a human readable string of the preamble of a byte array image of an HllSketch.
+   */
+  public static String toString(final byte[] byteArr) {
+    return PreambleUtil.toString(byteArr);
+  }
+
+  /**
+   * Returns a human readable string of the preamble of a Memory image of an HllSketch.
+   * @param mem the given Memory object
+   * @return a human readable string of the preamble of a Memory image of an HllSketch.
+   */
+  public static String toString(final Memory mem) {
+    return PreambleUtil.toString(mem);
+  }
+
   //restricted methods
 
   /**
-   * Gets a PairIterator over the key, value pairs of the HLL array.
+   * Returns a PairIterator over the key, value pairs of the HLL array.
    * @return a PairIterator over the key, value pairs of the HLL array.
    */
-  PairIterator getIterator() {
-    return hllSketchImpl.getIterator();
+  PairIterator iterator() {
+    return hllSketchImpl.iterator();
   }
 
-  CurMode getCurrentMode() {
+  @Override
+  CurMode getCurMode() {
     return hllSketchImpl.getCurMode();
   }
 

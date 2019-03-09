@@ -52,13 +52,6 @@ public abstract class CompactSketch extends Sketch {
   //restricted methods
 
   /**
-   * Gets the <a href="{@docRoot}/resources/dictionary.html#mem">Memory</a>
-   * if available, otherwise returns null.
-   * @return the backing Memory or null.
-   */
-  abstract Memory getMemory();
-
-  /**
    * Compact the given array. The source cache can be a hash table with interstitial zeros or
    * "dirty" values.
    * @param srcCache anything
@@ -123,6 +116,7 @@ public abstract class CompactSketch extends Sketch {
       final int curCount, final long thetaLong, final WritableMemory dstMem,
       final byte flags, final int preLongs) {
 
+    assert (dstMem != null) && (compactCache != null);
     final int outLongs = preLongs + curCount;
     final int outBytes = outLongs << 3;
     final int dstBytes = (int) dstMem.getCapacity();
@@ -132,26 +126,23 @@ public abstract class CompactSketch extends Sketch {
     }
     final byte famID = (byte) Family.COMPACT.getID();
 
-    final Object memObj = dstMem.getArray(); //may be null
-    final long memAdd = dstMem.getCumulativeOffset(0L);
-
-    insertPreLongs(memObj, memAdd, preLongs); //RF not used = 0
-    insertSerVer(memObj, memAdd, SER_VER);
-    insertFamilyID(memObj, memAdd, famID);
+    insertPreLongs(dstMem, preLongs); //RF not used = 0
+    insertSerVer(dstMem, SER_VER);
+    insertFamilyID(dstMem, famID);
     //ignore lgNomLongs, lgArrLongs bytes for compact sketches
-    insertFlags(memObj, memAdd, flags);
-    insertSeedHash(memObj, memAdd, seedHash);
+    insertFlags(dstMem, flags);
+    insertSeedHash(dstMem, seedHash);
 
     if ((preLongs == 1) && (curCount == 1)) { //singleItem
       dstMem.putLong(8, compactCache[0]);
       return dstMem;
     }
     if (preLongs > 1) {
-      insertCurCount(memObj, memAdd, curCount);
-      insertP(memObj, memAdd, (float) 1.0);
+      insertCurCount(dstMem, curCount);
+      insertP(dstMem, (float) 1.0);
     }
     if (preLongs > 2) {
-      insertThetaLong(memObj, memAdd, thetaLong);
+      insertThetaLong(dstMem, thetaLong);
     }
     if ((compactCache != null) && (curCount > 0)) {
       dstMem.putLongArray(preLongs << 3, compactCache, 0, curCount);

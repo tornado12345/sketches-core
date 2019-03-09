@@ -5,6 +5,8 @@
 
 package com.yahoo.sketches.quantiles;
 
+import static com.yahoo.sketches.quantiles.Util.checkFractionalRankBounds;
+
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -48,7 +50,7 @@ final class ItemsAuxiliary<T> {
 
     // convert the item weights into totals of the weights preceding each item
     long subtot = 0;
-    for (int i = 0; i < numSamples + 1; i++ ) {
+    for (int i = 0; i < (numSamples + 1); i++ ) {
       final long newSubtot = subtot + cumWtsArr[i];
       cumWtsArr[i] = subtot;
       subtot = newSubtot;
@@ -62,21 +64,20 @@ final class ItemsAuxiliary<T> {
   }
 
   /**
-   * Get the estimated value given phi
-   * @param phi the fractional position where: 0 &le; &#966; &le; 1.0.
-   * @return the estimated value given phi
+   * Get the estimated quantile given a fractional rank.
+   * @param fRank the fractional rank where: 0 &le; fRank &le; 1.0.
+   * @return the estimated quantile
    */
-  T getQuantile(final double phi) {
-    assert 0.0 <= phi;
-    assert phi <= 1.0;
+  T getQuantile(final double fRank) {
+    checkFractionalRankBounds(fRank);
     if (auxN_ <= 0) { return null; }
-    final long pos = QuantilesHelper.posOfPhi(phi, auxN_);
-    return (approximatelyAnswerPositionalQuery(pos));
+    final long pos = QuantilesHelper.posOfPhi(fRank, auxN_);
+    return approximatelyAnswerPositionalQuery(pos);
   }
 
   /**
    * Assuming that there are n items in the true stream, this asks what
-   * item would appear in position 0 <= pos < n of a hypothetical sorted
+   * item would appear in position 0 &le; pos &lt; n of a hypothetical sorted
    * version of that stream.
    *
    * <p>Note that since that since the true stream is unavailable,
@@ -96,6 +97,7 @@ final class ItemsAuxiliary<T> {
 
   /**
    * Populate the arrays and registers from an ItemsSketch
+   * @param <T> the data type
    * @param k K value of sketch
    * @param n The current size of the stream
    * @param bitPattern the bit pattern for valid log levels
@@ -104,6 +106,7 @@ final class ItemsAuxiliary<T> {
    * @param numSamples Total samples in the sketch
    * @param itemsArr the consolidated array of all items from the sketch populated here
    * @param cumWtsArr the cumulative weights for each item from the sketch populated here
+   * @param comparator the given comparator for data type T
    */
   private final static <T> void populateFromItemsSketch(
       final int k, final long n, final long bitPattern, final T[] combinedBuffer,
@@ -112,7 +115,7 @@ final class ItemsAuxiliary<T> {
     long weight = 1;
     int nxt = 0;
     long bits = bitPattern;
-    assert bits == n / (2L * k); // internal consistency check
+    assert bits == (n / (2L * k)); // internal consistency check
     for (int lvl = 0; bits != 0L; lvl++, bits >>>= 1) {
       weight *= 2;
       if ((bits & 1L) > 0L) {

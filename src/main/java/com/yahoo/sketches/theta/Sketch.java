@@ -175,6 +175,14 @@ public abstract class Sketch {
   public abstract Family getFamily();
 
   /**
+   * Returns a HashIterator that can be used to iterate over the retained hash values of the
+   * Theta sketch.
+   * @return a HashIterator that can be used to iterate over the retained hash values of the
+   * Theta sketch.
+   */
+  public abstract HashIterator iterator();
+
+  /**
    * Gets the approximate lower error bound given the specified number of Standard Deviations.
    * This will return getEstimate() if isEmpty() is true.
    *
@@ -248,6 +256,12 @@ public abstract class Sketch {
   }
 
   /**
+   * Gets the value of theta as a long
+   * @return the value of theta as a long
+   */
+  public abstract long getThetaLong();
+
+  /**
    * Gets the approximate upper error bound given the specified number of Standard Deviations.
    * This will return getEstimate() if isEmpty() is true.
    *
@@ -262,14 +276,22 @@ public abstract class Sketch {
   }
 
   /**
+   * Returns true if this sketch's data structure is backed by Memory or WritableMemory.
+   * @return true if this sketch's data structure is backed by Memory or WritableMemory.
+   */
+  public abstract boolean hasMemory();
+
+  /**
    * Returns true if this sketch is in compact form.
    * @return true if this sketch is in compact form.
    */
   public abstract boolean isCompact();
 
   /**
-   * Returns true if this sketch accesses its internal data using the Memory package
-   * @return true if this sketch accesses its internal data using the Memory package
+   * Returns true if the this sketch's internal data structure is backed by direct (off-heap)
+   * Memory.
+   * @return true if the this sketch's internal data structure is backed by direct (off-heap)
+   * Memory.
    */
   public abstract boolean isDirect();
 
@@ -295,14 +317,14 @@ public abstract class Sketch {
   public abstract boolean isOrdered();
 
   /**
-   * Returns true if the backing resource of this sketch is identical with the backing resource
-   * of mem. If the backing resource is a primitive array or ByteBuffer, the offset and
-   * capacity must also be identical.
-   * @param mem A given Memory object
-   * @return true if the backing resource of this sketch is identical with the backing resource
-   * of mem.
+   * Returns true if the backing resource of <i>this</i> is identical with the backing resource
+   * of <i>that</i>. The capacities must be the same.  If <i>this</i> is a region,
+   * the region offset must also be the same.
+   * @param that A different non-null object
+   * @return true if the backing resource of <i>this</i> is the same as the backing resource
+   * of <i>that</i>.
    */
-  public boolean isSameResource(final Memory mem) {
+  public boolean isSameResource(final Memory that) {
     return false;
   }
 
@@ -341,7 +363,6 @@ public abstract class Sketch {
     final long[] cache = getCache();
     int nomLongs = 0;
     int arrLongs = cache.length;
-    long seed = 0;
     float p = 0;
     int rf = 0;
     final boolean updateSketch = (this instanceof UpdateSketch);
@@ -352,7 +373,6 @@ public abstract class Sketch {
     if (updateSketch) {
       final UpdateSketch uis = (UpdateSketch)this;
       nomLongs = 1 << uis.getLgNomLongs();
-      seed = uis.getSeed();
       arrLongs = 1 << uis.getLgArrLongs();
       p = uis.getP();
       rf = uis.getResizeFactor().getValue();
@@ -387,7 +407,7 @@ public abstract class Sketch {
       final double thetaDbl = thetaLong / MAX_THETA_LONG_AS_DOUBLE;
       final String thetaHex = zeroPad(Long.toHexString(thetaLong), 16);
       final String thisSimpleName = this.getClass().getSimpleName();
-      final int seedHash = getSeedHash() & 0XFFFF;
+      final int seedHash = Short.toUnsignedInt(getSeedHash());
 
       sb.append(LS);
       sb.append("### ").append(thisSimpleName).append(" SUMMARY: ").append(LS);
@@ -410,16 +430,30 @@ public abstract class Sketch {
       }
       sb.append("   Array Size Entries      : ").append(arrLongs).append(LS);
       sb.append("   Retained Entries        : ").append(curCount).append(LS);
-      if (updateSketch) {
-        sb.append("   Update Seed             : ")
-          .append(Long.toHexString(seed)).append(" | ")
-          .append(Long.toString(seed)).append(LS);
-      }
-      sb.append("   Seed Hash               : ").append(Integer.toHexString(seedHash)).append(LS);
+      sb.append("   Seed Hash               : ").append(Integer.toHexString(seedHash))
+        .append(" | ").append(seedHash).append(LS);
       sb.append("### END SKETCH SUMMARY").append(LS);
 
     }
     return sb.toString();
+  }
+
+  /**
+   * Returns a human readable string of the preamble of a byte array image of a Theta Sketch.
+   * @param byteArr the given byte array
+   * @return a human readable string of the preamble of a byte array image of a Theta Sketch.
+   */
+  public static String toString(final byte[] byteArr) {
+    return PreambleUtil.preambleToString(byteArr);
+  }
+
+  /**
+   * Returns a human readable string of the preamble of a Memory image of a Theta Sketch.
+   * @param mem the given Memory object
+   * @return a human readable string of the preamble of a Memory image of a Theta Sketch.
+   */
+  public static String toString(final Memory mem) {
+    return PreambleUtil.preambleToString(mem);
   }
 
   //Restricted methods
@@ -450,26 +484,44 @@ public abstract class Sketch {
   }
 
   /**
+   * Returns the Memory object if it exists, otherwise null.
+   * @return the Memory object if it exists, otherwise null.
+   */
+  abstract Memory getMemory();
+
+  /**
    * Gets the 16-bit seed hash
    * @return the seed hash
    */
   abstract short getSeedHash();
 
   /**
-   * Gets the value of theta as a long
-   * @return the value of theta as a long
-   */
-  abstract long getThetaLong();
-
-  /**
    * Returns true if given Family id is one of the theta sketches
    * @param id the given Family id
    * @return true if given Family id is one of the theta sketches
    */
-  static boolean isValidSketchID(final int id) {
+  static final boolean isValidSketchID(final int id) {
     return (id == Family.ALPHA.getID())
         || (id == Family.QUICKSELECT.getID())
         || (id == Family.COMPACT.getID());
+  }
+
+  /**
+   * Checks Ordered and Compact flags for integrity between sketch and Memory
+   * @param sketch the given sketch
+   */
+  static final void checkSketchAndMemoryFlags(final Sketch sketch) {
+    final Memory mem = sketch.getMemory();
+    if (mem == null) { return; }
+    final int flags = PreambleUtil.extractFlags(mem);
+    if (((flags & COMPACT_FLAG_MASK) > 0) ^ sketch.isCompact()) {
+      throw new SketchesArgumentException("Possible corruption: "
+          + "Memory Compact Flag inconsistent with Sketch");
+    }
+    if (((flags & ORDERED_FLAG_MASK) > 0) ^ sketch.isOrdered()) {
+      throw new SketchesArgumentException("Possible corruption: "
+          + "Memory Ordered Flag inconsistent with Sketch");
+    }
   }
 
   static final double estimate(final long thetaLong, final int curCount, final boolean empty) {

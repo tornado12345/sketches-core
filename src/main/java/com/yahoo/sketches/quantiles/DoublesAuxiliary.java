@@ -6,6 +6,7 @@
 package com.yahoo.sketches.quantiles;
 
 import static com.yahoo.sketches.quantiles.DoublesSketchAccessor.BB_LVL_IDX;
+import static com.yahoo.sketches.quantiles.Util.checkFractionalRankBounds;
 import static java.lang.System.arraycopy;
 
 import java.util.Arrays;
@@ -54,22 +55,19 @@ final class DoublesAuxiliary {
   }
 
   /**
-   * Get the estimated value given phi
-   * @param phi the fractional position where: 0 &le; &#966; &le; 1.0.
-   * @return the estimated value given phi
+   * Get the estimated quantile given a fractional rank.
+   * @param fRank the fractional rank where: 0 &le; fRank &le; 1.0.
+   * @return the estimated quantile
    */
-  double getQuantile(final double phi) {
-    assert 0.0 <= phi;
-    assert phi <= 1.0;
-    final long n = this.auxN_;
-    if (n <= 0) { return Double.NaN; }
-    final long pos = QuantilesHelper.posOfPhi(phi, n);
+  double getQuantile(final double fRank) {
+    checkFractionalRankBounds(fRank);
+    final long pos = QuantilesHelper.posOfPhi(fRank, auxN_);
     return approximatelyAnswerPositionalQuery(pos);
   }
 
   /**
    * Assuming that there are n items in the true stream, this asks what
-   * item would appear in position 0 <= pos < n of a hypothetical sorted
+   * item would appear in position 0 &le; pos &lt; n of a hypothetical sorted
    * version of that stream.
    *
    * <p>Note that since that since the true stream is unavailable,
@@ -81,9 +79,9 @@ final class DoublesAuxiliary {
    */
   private double approximatelyAnswerPositionalQuery(final long pos) {
     assert 0 <= pos;
-    assert pos < this.auxN_;
-    final int index = QuantilesHelper.chunkContainingPos(this.auxCumWtsArr_, pos);
-    return this.auxSamplesArr_[index];
+    assert pos < auxN_;
+    final int index = QuantilesHelper.chunkContainingPos(auxCumWtsArr_, pos);
+    return auxSamplesArr_[index];
   }
 
   /**
@@ -102,7 +100,7 @@ final class DoublesAuxiliary {
     long weight = 1;
     int nxt = 0;
     long bits = bitPattern;
-    assert bits == n / (2L * k); // internal consistency check
+    assert bits == (n / (2L * k)); // internal consistency check
     for (int lvl = 0; bits != 0L; lvl++, bits >>>= 1) {
       weight *= 2;
       if ((bits & 1L) > 0L) {
@@ -151,8 +149,8 @@ final class DoublesAuxiliary {
     assert blkSize >= 1;
     if (arrLen <= blkSize) { return; }
     int numblks = arrLen / blkSize;
-    if (numblks * blkSize < arrLen) { numblks += 1; }
-    assert (numblks * blkSize >= arrLen);
+    if ((numblks * blkSize) < arrLen) { numblks += 1; }
+    assert ((numblks * blkSize) >= arrLen);
 
     // duplicate the input is preparation for the "ping-pong" copy reduction strategy.
     final double[] keyTmp = Arrays.copyOf(keyArr, arrLen);
@@ -212,7 +210,7 @@ final class DoublesAuxiliary {
     int arrLen2         = grpLen2   * blkSize;
 
     // special case for the final block which might be shorter than blkSize.
-    if (arrStart2 + arrLen2 > arrLim) { arrLen2 = arrLim - arrStart2; }
+    if ((arrStart2 + arrLen2) > arrLim) { arrLen2 = arrLim - arrStart2; }
 
     tandemMerge(keySrc, valSrc,
                 arrStart1, arrLen1,
@@ -245,7 +243,7 @@ final class DoublesAuxiliary {
     int i1 = arrStart1;
     int i2 = arrStart2;
     int i3 = arrStart3;
-    while (i1 < arrStop1 && i2 < arrStop2) {
+    while ((i1 < arrStop1) && (i2 < arrStop2)) {
       if (keySrc[i2] < keySrc[i1]) {
         keyDst[i3] = keySrc[i2];
         valDst[i3] = valSrc[i2];
